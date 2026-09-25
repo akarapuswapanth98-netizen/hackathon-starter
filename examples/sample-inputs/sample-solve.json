@@ -1,0 +1,6 @@
+{
+  "query": "Summarize the impact of RAG on LLM accuracy for document Q&A",
+  "context": "For hackathon demo, concise bullet points",
+  "use_rag": false,
+  "use_agents": true
+}

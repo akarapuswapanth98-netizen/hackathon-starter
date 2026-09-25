@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "answer": "Risks: 1) Data leakage (p.2) [1] 2) Compliance gap (p.4) [2] ...",
+  "sources": [
+    { "id": "policy.pdf#chunk1", "score": 12, "preview": "Data must be encrypted at rest..." },
+    { "id": "policy.pdf#chunk2", "score": 9, "preview": "Compliance requires audit logs..." }
+  ],
+  "metadata": { "workflow": "langgraph", "validator_passed": true, "rag_hits": 2 },
+  "confidence": null,
+  "reasoning_steps": ["planner: plan created", "tool: checked rag", "reasoner: draft generated", "validator: PASSED"]
+}

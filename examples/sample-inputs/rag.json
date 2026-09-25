@@ -1,0 +1,6 @@
+{
+  "query": "What are the key risks mentioned in the uploaded policy document?",
+  "context": "Uploaded PDF: policy.pdf. Need sources and citations.",
+  "use_rag": true,
+  "use_agents": true
+}

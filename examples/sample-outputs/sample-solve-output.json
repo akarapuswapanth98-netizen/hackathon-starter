@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "answer": "[MOCK gpt-4o-mini] This is a mock answer. Set LLM_API_KEY for real output.",
+  "sources": [],
+  "metadata": {
+    "workflow": "langgraph",
+    "validator_passed": true
+  },
+  "confidence": null,
+  "reasoning_steps": [
+    "planner: plan created",
+    "reasoner: draft generated",
+    "validator: PASSED (mock mode)",
+    "final: packaged"
+  ]
+}

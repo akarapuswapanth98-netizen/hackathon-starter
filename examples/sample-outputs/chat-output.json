@@ -1,0 +1,7 @@
+{
+  "reply": "[MOCK gpt-4o-mini] LangGraph adds predictable agent nodes: planner -> reasoner -> validator. Use when you need multi-step reasoning, not single LLM call.",
+  "provider": "mock",
+  "model": "gpt-4o-mini",
+  "sources": [],
+  "meta": { "demo": true }
+}

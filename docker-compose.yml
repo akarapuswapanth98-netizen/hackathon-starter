@@ -1,0 +1,35 @@
+# Optional - only use if clean Docker needed. App runs without Docker.
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+      - ./database:/db
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host
+
+# Postgres optional (Supabase local alternative)
+# Uncomment if local DB needed:
+#  db:
+#    image: postgres:16
+#    ports: ["5432:5432"]
+#    environment:
+#      POSTGRES_DB: hackathon
+#      POSTGRES_USER: postgres
+#      POSTGRES_PASSWORD: postgres
+#    volumes:
+#      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql

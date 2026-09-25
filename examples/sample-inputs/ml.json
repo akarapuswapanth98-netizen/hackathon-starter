@@ -1,0 +1,6 @@
+{
+  "query": "Predict churn from CSV: tenure, monthly_charges, total_charges -> churn label. Use RandomForest.",
+  "context": "CSV uploaded via /api/upload, target column = churn",
+  "use_rag": false,
+  "use_agents": true
+}
