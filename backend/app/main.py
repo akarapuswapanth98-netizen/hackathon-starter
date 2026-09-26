@@ -8,6 +8,7 @@ from app.api.routes_health import router as health_router
 from app.api.routes_chat import router as chat_router
 from app.api.routes_solve import router as solve_router
 from app.api.routes_upload import router as upload_router
+from app.api.routes_foodbridge import router as foodbridge_router
 
 # Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router, prefix="/api", tags=["chat"])
     app.include_router(solve_router, prefix="/api", tags=["solve"])
     app.include_router(upload_router, prefix="/api", tags=["upload"])
+    app.include_router(foodbridge_router, prefix="/api", tags=["foodbridge"])
 
     @app.get("/")
     async def root():
