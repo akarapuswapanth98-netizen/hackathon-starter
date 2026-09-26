@@ -1,12 +1,14 @@
 # Core - must have
-fastapi==0.115.0
-uvicorn[standard]==0.34.0
-pydantic==2.11.0
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.4
 python-dotenv==1.0.1
-httpx==0.27.0
-pytest==8.3.0
-pytest-asyncio==0.24.0
-httpx==0.27.0
+httpx==0.28.1
+pytest==9.1.1
+# pytest-asyncio==0.24.0  # disabled: requires pytest<9, conflicts with pytest==9.1.1 above;
+  # FoodBridge tests use asyncio.run (no async test funcs), dev env has no pytest-asyncio installed
+httpx==0.28.1
+python-multipart==0.0.32  # required: app uses FastAPI Form (upload route); missing it breaks import
 
 # AI - lightweight core
 # LLM provider clients - install only what you need
@@ -14,8 +16,8 @@ httpx==0.27.0
 # groq==0.11.0    # uncomment if using Groq
 # google-generativeai==0.8.0  # uncomment if Gemini
 # anthropic==0.40.0  # uncomment if Anthropic
-langgraph==0.2.39
-langchain-core==0.3.33
+langgraph==1.2.12
+langchain-core==1.6.5
 
 # Optional groups - install when needed
 # RAG:
