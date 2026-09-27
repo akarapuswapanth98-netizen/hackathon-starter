@@ -22,6 +22,8 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
       - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
         run: pytest tests/ -q
 
   frontend:
@@ -37,7 +39,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install deps
-        run: npm ci
+        run: npm install
       - name: Lint + typecheck
         run: npm run lint 2>/dev/null || npm run typecheck 2>/dev/null || echo "no lint/typecheck scripts"
       - name: Build
@@ -58,4 +60,6 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
       - name: Validate OpenAPI contract
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
         run: pytest tests/test_openapi_contract.py -q
