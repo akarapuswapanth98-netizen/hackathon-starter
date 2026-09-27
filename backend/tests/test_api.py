@@ -1,5 +1,6 @@
 import sys
-sys.path.insert(0, "C:/Users/akara/hackathon-starter/backend")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi.testclient import TestClient
 from app.main import app
