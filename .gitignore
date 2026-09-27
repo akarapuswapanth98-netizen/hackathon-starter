@@ -32,7 +32,7 @@ Thumbs.db
 # DB & models
 *.db
 *.sqlite
-models/
+/models/
 checkpoints/
 
 # IDE
