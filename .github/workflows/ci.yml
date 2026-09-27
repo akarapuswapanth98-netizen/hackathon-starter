@@ -19,9 +19,11 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      - name: Install backend package
-        run: pip install -e .
+      - name: Install deps
+        run: pip install -r requirements.txt
       - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
         run: pytest tests/ -q
 
   frontend:
@@ -55,7 +57,9 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      - name: Install backend package
-        run: pip install -e .
+      - name: Install deps
+        run: pip install -r requirements.txt
       - name: Validate OpenAPI contract
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
         run: pytest tests/test_openapi_contract.py -q
