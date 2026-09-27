@@ -1,0 +1,26 @@
+{
+  "name": "Hackathon Starter",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "service": "backend",
+  "forwardPorts": [8000, 5173],
+  "postCreateCommand": "cd backend && pip install -r requirements.txt && cd ../frontend && npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.formatting.provider": "black"
+      }
+    }
+  }
+}
