@@ -1,0 +1,24 @@
+{
+  "name": "@hackathon/foodbridge-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FoodBridge core multi-agent logic (Python package)",
+  "main": "index.py",
+  "scripts": {
+    "test": "pytest tests/ -q",
+    "lint": "ruff check ."
+  },
+  "dependencies": {
+    "fastapi": "0.141.1",
+    "uvicorn": "0.54.0",
+    "pydantic": "2.13.5",
+    "python-dotenv": "1.2.3",
+    "httpx": "0.28.1",
+    "langgraph": "1.2.12",
+    "langchain-core": "1.6.5",
+    "python-multipart": "0.0.32"
+  },
+  "devDependencies": {
+    "pytest": "9.1.1"
+  }
+}

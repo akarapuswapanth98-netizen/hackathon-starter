@@ -1,3 +1,6 @@
+# Vercel ignore file
+# Files and directories to exclude from Vercel deployment
+
 # Python
 __pycache__/
 *.py[cod]
@@ -10,9 +13,6 @@ env/
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
-.mypy_cache/
-.ruff_cache/
 
 # Node
 node_modules/
@@ -49,6 +49,12 @@ checkpoints/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
 
 # Test
 coverage/
@@ -58,9 +64,6 @@ coverage/
 .docker/
 docker-compose.override.yml
 
-# Vercel
+# Vercel specific
 .vercel/
 vercel.json
-
-# TypeScript
-*.tsbuildinfo

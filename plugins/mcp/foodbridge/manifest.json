@@ -1,0 +1,59 @@
+{
+  "name": "foodbridge-mcp",
+  "version": "0.1.0",
+  "description": "FoodBridge MCP Server for Model Context Protocol",
+  "tools": [
+    {
+      "name": "foodbridge_match",
+      "description": "Execute a FoodBridge match workflow",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "surplus_id": { "type": "string", "description": "Surplus lot ID" },
+          "requested_radius_km": { "type": "number", "description": "Search radius in km", "default": 10 },
+          "shelter_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional shelter IDs" },
+          "include_summary": { "type": "boolean", "default": true }
+        },
+        "required": ["surplus_id"]
+      }
+    },
+    {
+      "name": "foodbridge_reset",
+      "description": "Reset FoodBridge demo data",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "foodbridge_list_surplus",
+      "description": "List available surplus lots",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "include_all": { "type": "boolean", "default": false }
+        }
+      }
+    },
+    {
+      "name": "foodbridge_list_shelters",
+      "description": "List all shelters",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "foodbridge_get_events",
+      "description": "Get agent events for a workflow",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workflow_id": { "type": "string" },
+          "limit": { "type": "integer", "default": 100 }
+        },
+        "required": ["workflow_id"]
+      }
+    }
+  ]
+}
