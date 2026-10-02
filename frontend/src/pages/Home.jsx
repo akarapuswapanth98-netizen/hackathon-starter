@@ -23,10 +23,16 @@ export default function Home() {
   const [answer, setAnswer] = useState('')
   const [sources, setSources] = useState([])
   const [steps, setSteps] = useState([])
+  const [trace, setTrace] = useState([])
   const [meta, setMeta] = useState(null)
   const [health, setHealth] = useState(null)
   const [healthError, setHealthError] = useState('')
   const [sampleIdx, setSampleIdx] = useState(0)
+  const [dark, setDark] = useState(false)
+
+  useEffect(() => {
+    try { document.documentElement.dataset.theme = dark ? 'dark' : '' } catch { /* ignore */ }
+  }, [dark])
 
   // Auto-check health on mount - helps judge see backend is live
   useEffect(() => { checkHealth() }, [])
@@ -58,19 +64,69 @@ export default function Home() {
   }
 
   function clearAll() {
-    setQuery(''); setContext(''); setAnswer(''); setSources([]); setSteps([]); setMeta(null); setError('')
+    setQuery(''); setContext(''); setAnswer(''); setSources([]); setSteps([]); setTrace([]); setMeta(null); setError('')
+  }
+
+  function tryExample() {
+    const s = SAMPLES[1]
+    setQuery(s.query); setContext(s.context); setSampleIdx(1)
   }
 
   async function handleSolve() {
     if (!query.trim()) { setError('Please enter a problem / query'); return }
-    setLoading(true); setError(''); setAnswer(''); setSources([]); setSteps([]); setMeta(null)
+    if (query.length > 8000) { setError('Query too long (max 8000 chars)'); return }
+    setLoading(true); setError(''); setAnswer(''); setSources([]); setSteps([]); setTrace([]); setMeta(null)
     try {
-      // API CONTRACT: {query, context, use_rag, use_agents, options} -> {success, answer, sources, metadata, confidence}
+      // API CONTRACT: {query, context, use_rag, use_agents} -> {success, answer, sources, metadata, reasoning_steps, steps}
       const res = await api.solve({ query, context, use_rag: useRag, use_agents: useAgents })
       setAnswer(res.answer)
       setSources(res.sources || [])
       setSteps(res.reasoning_steps || [])
-      setMeta(res.metadata)
+      setTrace(res.steps || [])
+      setMeta({ ...res.metadata, total_duration_ms: res.total_duration_ms, token_estimate: res.token_estimate })
+    } catch (e) {
+      setError(e.message)
+    } finally { setLoading(false) }
+  }
+
+  async function handleSolveLive() {
+    if (!query.trim()) { setError('Please enter a problem / query'); return }
+    setLoading(true); setError(''); setAnswer(''); setSources([]); setSteps([]); setTrace([]); setMeta(null)
+    try {
+      const base = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const res = await fetch(`${base}/api/solve/stream`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, context, use_rag: useRag, use_agents: useAgents }),
+      })
+      if (!res.ok || !res.body) throw new Error(`Stream failed: HTTP ${res.status}`)
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      const liveTrace = []
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const parts = buf.split('\n\n')
+        buf = parts.pop() || ''
+        for (const p of parts) {
+          const line = p.trim()
+          if (!line.startsWith('data:')) continue
+          try {
+            const evt = JSON.parse(line.slice(5).trim())
+            if (evt.type === 'step' && evt.step) {
+              liveTrace.push(evt.step)
+              setTrace([...liveTrace])
+              setSteps([...liveTrace.map((t) => `${t.node}: ${t.output_summary || ''}`)])
+            } else if (evt.type === 'final') {
+              setAnswer(evt.answer || '')
+              setSources(evt.sources || [])
+              setTrace(evt.trace || liveTrace)
+              setMeta({ total_duration_ms: evt.total_duration_ms })
+            }
+          } catch { /* ignore partial */ }
+        }
+      }
     } catch (e) {
       setError(e.message)
     } finally { setLoading(false) }
@@ -78,7 +134,7 @@ export default function Home() {
 
   async function handleChat() {
     if (!query.trim()) { setError('Please enter a message'); return }
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setTrace([])
     try {
       const res = await api.chat({ message: query, use_rag: useRag })
       setAnswer(res.reply)
@@ -109,6 +165,7 @@ export default function Home() {
               <span className="badge badge-neutral">Checking...</span>
             )}
             <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={checkHealth}>↻ Health</button>
+            <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setDark((d) => !d)}>{dark ? '☀️ Light' : '🌙 Dark'}</button>
           </div>
         </div>
         {healthError && <div className="container" style={{ paddingTop: 0 }}><ErrorBanner error={healthError} onDismiss={()=>setHealthError('')} /></div>}
@@ -123,7 +180,7 @@ export default function Home() {
               <div className="small" style={{ marginTop: '4px' }}>React + FastAPI + LangGraph (optional) + RAG (optional) · API: <code>POST /api/solve</code> · Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to solve</div>
             </div>
             <div className="flex gap-2">
-              <a href="#/foodbridge" className="btn btn-secondary" style={{ padding: '8px 14px', textDecoration: 'none' }}>🍲 FoodBridge 3D Demo</a>
+              <button className="btn btn-secondary" style={{ padding: '8px 14px' }} onClick={tryExample}>✨ Try an example</button>
               <select value={sampleIdx} onChange={e=>applySample(Number(e.target.value))} className="input" style={{ width: '220px', padding: '8px' }}>
                 {SAMPLES.map((s,i)=><option key={i} value={i}>{s.label}</option>)}
               </select>
@@ -174,15 +231,16 @@ export default function Home() {
               <button onClick={handleSolve} disabled={loading} className="btn btn-primary" style={{ flex: 1, padding: '14px', fontSize: '16px', justifyContent: 'center' }}>
                 {loading ? '⏳ Solving...' : '▶ Solve (Agentic)'}
               </button>
+              <button onClick={handleSolveLive} disabled={loading} className="btn btn-secondary" style={{ padding: '14px 16px' }} title="Stream agent steps live via SSE">⚡ Live</button>
               <button onClick={handleChat} disabled={loading} className="btn btn-secondary" style={{ padding: '14px 20px' }}>Chat</button>
             </div>
-            <div className="small mt-2">Primary demo: <strong>Solve</strong> (LangGraph: planner → reasoner → validator). Fallback: Chat (direct LLM).</div>
+            <div className="small mt-2">Primary demo: <strong>Solve</strong> (planner → executor/tools → validator). <strong>Live</strong> streams steps via SSE. Fallback: Chat.</div>
           </div>
 
           {/* Right: Output */}
           <div>
             <ErrorBanner error={error} onDismiss={()=>setError('')} onRetry={handleSolve} />
-            <ResponseArea loading={loading} answer={answer} steps={steps} meta={meta} />
+            <ResponseArea loading={loading} answer={answer} steps={steps} trace={trace} meta={meta} />
             <SourcePanel sources={sources} />
             {/* Helpers for demo */}
             <div className="card mt-3" style={{ background: 'var(--gray-50)' }}>

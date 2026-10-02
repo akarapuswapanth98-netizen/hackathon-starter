@@ -15,49 +15,38 @@ def _get_bool(key: str, default: bool = False) -> bool:
 
 
 class Settings:
-    # LLM - provider agnostic
-    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "mock").lower()
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
-    LLM_API_KEY: str = os.getenv("LLM_API_KEY", "") or os.getenv("OPENAI_API_KEY", "") or os.getenv("GROQ_API_KEY", "") or os.getenv("GEMINI_API_KEY", "") or os.getenv("ANTHROPIC_API_KEY", "")
-    # Allows per-provider override without changing LLM_API_KEY
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    """Env-driven settings. Read per-instance so tests can override env + cache_clear."""
 
-    # RAG - disabled by default
-    RAG_ENABLED: bool = _get_bool("RAG_ENABLED", False) or _get_bool("ENABLE_RAG", False)
-    RAG_PROVIDER: str = os.getenv("RAG_PROVIDER", "mock")
-
-    # Database - SQLite default, PostgreSQL-ready
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
-    # Auto-create SQLite data directory
-    DATABASE_AUTO_CREATE: bool = _get_bool("DATABASE_AUTO_CREATE", True)
-
-    # Mode: LIVE | DEMO | AUTO
-    # LIVE: real LLM, real DB, full features
-    # DEMO: deterministic, in-memory, no tokens
-    # AUTO: detect from LLM_API_KEY and DATABASE_URL
-    APP_MODE: str = os.getenv("APP_MODE", "AUTO").upper()
-
-    # App
-    APP_ENV: str = os.getenv("APP_ENV", "development")
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
-    CORS_ORIGINS: list[str] = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
-    API_TIMEOUT: int = int(os.getenv("API_TIMEOUT", "30"))
-
-    # Optional features
-    ML_ENABLED: bool = _get_bool("ML_ENABLED", False)
-    VISION_ENABLED: bool = _get_bool("VISION_ENABLED", False)
-
-    # Auth (optional)
-    AUTH_ENABLED: bool = _get_bool("AUTH_ENABLED", False)
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "")
-    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
-    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "30"))
-
-    # Maps provider: haversine | osrm | google | mapbox
-    MAPS_PROVIDER: str = os.getenv("MAPS_PROVIDER", "haversine").lower()
+    def __init__(self) -> None:
+        self.LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "mock").lower()
+        self.LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+        self.LLM_API_KEY: str = os.getenv("LLM_API_KEY", "") or os.getenv("OPENAI_API_KEY", "") or os.getenv("GROQ_API_KEY", "") or os.getenv("GEMINI_API_KEY", "") or os.getenv("ANTHROPIC_API_KEY", "")
+        self.OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+        self.GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+        self.GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+        self.ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+        self.RAG_ENABLED: bool = _get_bool("RAG_ENABLED", False) or _get_bool("ENABLE_RAG", False)
+        self.RAG_PROVIDER: str = os.getenv("RAG_PROVIDER", "mock")
+        self.DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+        self.DATABASE_AUTO_CREATE: bool = _get_bool("DATABASE_AUTO_CREATE", True)
+        self.APP_MODE: str = os.getenv("APP_MODE", "AUTO").upper()
+        self.APP_ENV: str = os.getenv("APP_ENV", "development")
+        self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
+        self.CORS_ORIGINS: list[str] = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
+        try:
+            self.API_TIMEOUT: int = int(os.getenv("API_TIMEOUT", "30"))
+        except ValueError:
+            self.API_TIMEOUT = 30
+        self.ML_ENABLED: bool = _get_bool("ML_ENABLED", False)
+        self.VISION_ENABLED: bool = _get_bool("VISION_ENABLED", False)
+        self.AUTH_ENABLED: bool = _get_bool("AUTH_ENABLED", False)
+        self.JWT_SECRET: str = os.getenv("JWT_SECRET", "")
+        self.JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+        try:
+            self.JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "30"))
+        except ValueError:
+            self.JWT_EXPIRE_MINUTES = 30
+        self.MAPS_PROVIDER: str = os.getenv("MAPS_PROVIDER", "haversine").lower()
 
     def is_live_mode(self) -> bool:
         """Check if running in LIVE mode."""

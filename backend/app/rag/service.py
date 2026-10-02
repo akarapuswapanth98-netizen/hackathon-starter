@@ -1,6 +1,7 @@
 """
 RAG service - OPTIONAL. Disabled unless RAG_ENABLED=true.
-LlamaIndex integration lazily imported. Falls back to simple keyword search.
+Honest keyword retrieval (no vector DB, no LlamaIndex required).
+Upload chunks text via /api/upload; query returns sources.
 """
 import logging
 import os
@@ -94,4 +95,11 @@ def get_rag() -> RAGService:
     global _rag
     if _rag is None:
         _rag = RAGService()
+    # Refresh enabled flag each call (env may change in tests).
+    _rag.enabled = get_settings().RAG_ENABLED
     return _rag
+
+
+def reset_rag() -> None:
+    global _rag
+    _rag = None

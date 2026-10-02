@@ -15,7 +15,7 @@ describe('ResponseArea', () => {
     render(<ResponseArea answer="[MOCK gpt] hello" steps={['planner']} meta={{}} loading={false} />)
     expect(screen.getByText(/Demo Mode/)).toBeInTheDocument()
     expect(screen.getByText(/hello/)).toBeInTheDocument()
-    expect(screen.getByText(/Reasoning steps/)).toBeInTheDocument()
+    expect(screen.getByText(/Agent steps/)).toBeInTheDocument()
   })
   it('renders real answer without demo banner', () => {
     render(<ResponseArea answer="Real answer" steps={[]} loading={false} />)
