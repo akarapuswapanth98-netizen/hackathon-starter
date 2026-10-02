@@ -76,7 +76,9 @@ def _pick_tools(problem: str) -> list[str]:
     available = [t for t in _KNOWN_TOOLS if t in TOOL_REGISTRY]
     picked: list[str] = []
     low = problem.lower()
-    if any(c.isdigit() for c in problem) and "calculator" in available:
+    if (any(c.isdigit() for c in problem)
+            or any(k in low for k in ("calculat", "cost", "price", "total", "math", "percent", "%"))
+            ) and "calculator" in available:
         picked.append("calculator")
     if any(k in low for k in ("clinic", "patient", "urgency", "triage")) and "classify_urgency" in available:
         picked.append("classify_urgency")
@@ -200,6 +202,16 @@ REPAIR_DEFAULTS = {
 _REPAIRABLE = ("stretch_goals", "judging_criteria_map", "risks")
 
 
+def _field_ok(key: str, value) -> bool:
+    """Repairable field usable as-is? Catches wrong-typed values (e.g. int scores in the map)."""
+    if key in ("stretch_goals", "risks"):
+        return (isinstance(value, list) and 2 <= len(value) <= 3
+                and all(isinstance(x, str) and x.strip() for x in value))
+    if key == "judging_criteria_map":
+        return (isinstance(value, dict) and len(value) >= 3
+                and all(isinstance(k, str) and isinstance(v, str) and v.strip()
+                        for k, v in value.items()))
+    return False
 def _core_valid(partial: dict) -> bool:
     """Core fields usable? Only then is a repair (not full heuristic) allowed."""
     try:
@@ -294,11 +306,14 @@ async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[P
             repaired = await _try_repair(llm, problem, partial)
             if repaired is not None:
                 return repaired, "partial_repair", e.reason
-            merged = dict(partial)
-            for k in _REPAIRABLE:
-                if not merged.get(k):
-                    merged[k] = REPAIR_DEFAULTS[k]
-            return ProjectSpec.model_validate(merged), "partial_repair", e.reason
+            try:
+                merged = dict(partial)
+                for k in _REPAIRABLE:
+                    if not _field_ok(k, merged.get(k)):
+                        merged[k] = REPAIR_DEFAULTS[k]
+                return ProjectSpec.model_validate(merged), "partial_repair", e.reason
+            except Exception:
+                pass  # fall through to full heuristic below
         logger.warning("intake LLM failed (%s), heuristic fallback", e.reason)
         return heuristic_spec(problem, criteria), "heuristic", e.reason
     except Exception as e:

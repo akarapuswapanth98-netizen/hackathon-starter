@@ -136,6 +136,34 @@ def test_repair_failure_uses_defaults():
         RI._llm_json = orig
 
 
+def test_int_valued_map_gets_replaced_not_500():
+    """Model returning int scores (usability:3) must not 500: replace with defaults."""
+    import asyncio
+    import app.api.routes_intake as RI
+    from app.agents.nodes import LLMJSONError
+
+    partial = _core_partial()
+    partial["stretch_goals"] = ["Voice input", "SMS alerts"]
+    partial["judging_criteria_map"] = {"usability": 3, "accuracy": 2, "speed": 1}  # wrong type
+    partial["risks"] = ["r1", "r2"]
+
+    async def int_map(llm, prompt, system, schema, example=None, max_tokens=400):
+        raise LLMJSONError("wrong_shape", "int map values", partial=partial)
+
+    orig = RI._llm_json
+    RI._llm_json = int_map
+    try:
+        spec, fallback, reason = asyncio.run(RI.generate_spec("Clinic triage help."))
+        assert fallback == "partial_repair"
+        assert spec.title == "Clinic Helper"
+        assert all(isinstance(v, str) for v in spec.judging_criteria_map.values())
+        # Endpoint-level: must be 200, never 500.
+        r = client.post("/api/intake", json={"problem": "Clinic triage help."})
+        assert r.status_code in (200, 422)
+    finally:
+        RI._llm_json = orig
+
+
 def test_full_heuristic_only_when_core_invalid():
     import asyncio
     import app.api.routes_intake as RI
