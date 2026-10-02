@@ -17,11 +17,11 @@ alembic==1.13.1
 # psycopg2-binary==2.9.9  # uncomment for PostgreSQL sync support
 
 # AI - lightweight core
-# LLM provider clients - install only what you need
-# openai==1.50.0  # uncomment if using OpenAI
-# groq==0.11.0    # uncomment if using Groq
-# google-generativeai==0.8.0  # uncomment if Gemini
-# anthropic==0.40.0  # uncomment if Anthropic
+# LLM provider clients - install only what you need (imports are lazy; mock works without them)
+openai==3.3.1  # also serves as Groq fallback via OpenAI-compatible endpoint
+groq==1.7.0  # needed for LLM_PROVIDER=groq (native client)
+# google-generativeai==0.8.0  # uncomment if using Gemini
+# anthropic==0.40.0  # uncomment if using Anthropic
 langgraph==1.2.12
 langchain-core==1.6.5
 
