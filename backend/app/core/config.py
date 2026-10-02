@@ -19,7 +19,7 @@ class Settings:
 
     def __init__(self) -> None:
         self.LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "mock").lower()
-        self.LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+        self.LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/gpt-oss-20b")
         self.LLM_API_KEY: str = os.getenv("LLM_API_KEY", "") or os.getenv("OPENAI_API_KEY", "") or os.getenv("GROQ_API_KEY", "") or os.getenv("GEMINI_API_KEY", "") or os.getenv("ANTHROPIC_API_KEY", "")
         self.OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
         self.GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")

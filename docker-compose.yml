@@ -28,7 +28,7 @@ services:
       DATABASE_URL: "postgresql://hackathon:${POSTGRES_PASSWORD:-hackathon}@db:5432/hackathon?schema=public"
       LLM_PROVIDER: "${LLM_PROVIDER:-mock}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
-      LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
+      LLM_MODEL: "${LLM_MODEL:-openai/gpt-oss-20b}"
       API_TIMEOUT: "30"
       CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}"
     depends_on:
@@ -47,7 +47,7 @@ services:
     environment:
       LLM_PROVIDER: "${LLM_PROVIDER:-mock}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
-      LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
+      LLM_MODEL: "${LLM_MODEL:-openai/gpt-oss-20b}"
       API_TIMEOUT: "30"
       CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}"
 

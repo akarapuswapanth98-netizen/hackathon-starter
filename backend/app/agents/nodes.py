@@ -136,6 +136,23 @@ async def planner_node(state: dict) -> Dict[str, Any]:
     return out
 
 
+def _validate_tool_args(tool: str, args: dict) -> str | None:
+    """Return an error string if args fail the tool's schema, else None."""
+    entry = TOOL_REGISTRY.get(tool, {})
+    schema = entry.get("args_schema")
+    if schema is None:
+        return None
+    try:
+        schema.model_validate(args or {})
+        return None
+    except Exception as e:
+        try:
+            fields = list(schema.model_json_schema().get("properties", {}).keys())
+        except Exception:
+            fields = []
+        return f"args {args} invalid for '{tool}' (required: {fields}): {e}".strip()[:300]
+
+
 def _rule_route(problem: str, rag_context: str, done_names: set[str]) -> tuple[str, dict] | None:
     """Deterministic keyword routing. Used by mock mode AND as the real-LLM fallback
     when the model won't return a valid routing decision (so tools still fire)."""
@@ -181,7 +198,22 @@ async def executor_node(state: dict) -> Dict[str, Any]:
         try:
             dec = await _llm_json(llm, prompt, "You route tool calls.", ExecutorDecision)
             if not dec.done and dec.tool and dec.tool in TOOL_REGISTRY:
-                routed = (dec.tool, dec.args or {})
+                err = _validate_tool_args(dec.tool, dec.args or {})
+                if err is None:
+                    routed = (dec.tool, dec.args or {})
+                else:
+                    # One corrective re-ask: tell the model exactly what's missing.
+                    logger.warning("executor bad args, corrective retry: %s", err[:150])
+                    dec2 = await _llm_json(
+                        llm,
+                        prompt + f"\nYour previous args were rejected: {err}. Reply corrected JSON.",
+                        "You route tool calls.", ExecutorDecision,
+                    )
+                    if not dec2.done and dec2.tool and dec2.tool in TOOL_REGISTRY \
+                            and _validate_tool_args(dec2.tool, dec2.args or {}) is None:
+                        routed = (dec2.tool, dec2.args or {})
+                    else:
+                        routed = _rule_route(problem, rag_context, done_names)
         except Exception as e:
             logger.warning("executor routing parse failed, rule fallback: %s", e)
             routed = _rule_route(problem, rag_context, done_names)
@@ -211,7 +243,8 @@ async def validator_node(state: dict) -> Dict[str, Any]:
     if not draft or len(draft.strip()) < 5 or draft.strip().startswith("[tool "):
         llm = LLMService()
         prompt = (f"Problem: {state.get('input','')}\nContext: {state.get('context') or 'None'}\n"
-                  f"Plan: {state.get('plan','')}\nTools: {state.get('tool_results', [])}\nRAG: {state.get('rag_context') or 'None'}")
+                  f"Plan: {state.get('plan','')}\nTools: {state.get('tool_results', [])}\nRAG: {state.get('rag_context') or 'None'}\n"
+                  f"Write the final answer. You MUST include every key number/fact from the tool observations above (e.g. computed totals, retrieved hours) — do not drop them.")
         try:
             draft = await llm.generate(prompt, system=SYSTEM_REASONER, temperature=0.7, max_tokens=800)
         except Exception as e:

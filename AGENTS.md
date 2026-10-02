@@ -72,7 +72,7 @@ npm run test
 ```bash
 LLM_PROVIDER=mock
 LLM_API_KEY=
-LLM_MODEL=gpt-4o-mini
+LLM_MODEL=openai/gpt-oss-20b
 RAG_ENABLED=false
 AUTH_ENABLED=false
 JWT_SECRET=
@@ -98,5 +98,5 @@ Adding a tool: define a function + Pydantic args, decorate with `@register_tool`
 
 ## Tests
 
-- Backend `python -m pytest -q`: 28 passed (22 in `backend/tests/` incl. agents/SSE/RAG + maps/ml). Mock offline.
+- Backend `python -m pytest -q`: 30 passed (24 in `backend/tests/` incl. agents/SSE/RAG/rate-limit + maps/ml). Mock offline.
 - Frontend `npm run test`: 14 passed; `npm run build` + `npm run lint` pass.

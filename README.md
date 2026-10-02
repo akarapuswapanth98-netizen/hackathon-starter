@@ -45,7 +45,7 @@ copy frontend\.env.example frontend\.env
 Backend `.env` keys (see `backend/.env.example`):
 
 - `LLM_PROVIDER=mock|openai|groq|gemini|anthropic` (default mock)
-- `LLM_MODEL=gpt-4o-mini`
+- `LLM_MODEL=openai/gpt-oss-20b`
 - `LLM_API_KEY` or provider-specific `OPENAI_API_KEY` etc. - never hard-code
 - `RAG_ENABLED=false` (set true to enable LlamaIndex)
 - `SUPABASE_ENABLED=false`, `SUPABASE_URL`, `SUPABASE_KEY`
@@ -81,7 +81,7 @@ Health: `http://localhost:8000/api/health` -> `{status:ok, llm_provider, rag_ena
 ```bash
 cd backend
 python -m pytest -q
-# 28 passed: 22 in tests/ (api, workflow, agents incl. SSE + RAG) + maps/ml; mock mode, offline
+# 30 passed: 24 in tests/ (api, workflow, agents incl. SSE + RAG, rate-limit) + maps/ml; mock mode, offline
 
 cd frontend
 npm run test   # 14 passed (api, Home, ResponseArea)
@@ -96,9 +96,10 @@ All tests run without API keys (mock provider).
 Single abstraction: `backend/app/ai/llm_service.py` (timeout 30s, 2 retries, token estimates, mock offline).
 ```bash
 LLM_PROVIDER=groq
-LLM_MODEL=llama-3.3-70b-versatile
+LLM_MODEL=openai/gpt-oss-20b
 GROQ_API_KEY=gsk_...
 ```
+Verified live 2026-10-02: `openai/gpt-oss-20b` (fast, JSON-reliable). `llama-3.3-70b-versatile` is Enterprise-only on Groq — not on free keys. Bigger alt: `openai/gpt-oss-120b` (slower, weaker JSON here — see QA notes).
 Change env only - no code rewrite. Adapters isolated in `backend/app/ai/providers/*.py`. Missing key -> 503 with `LLM provider 'x' not configured` (no stack leak).
 
 ## 9. RAG Activation
@@ -198,7 +199,7 @@ See `docs/api-contract.md`: `GET /api/health`, `POST /api/chat`, `POST /api/solv
 
 ## Tests & Build Results
 
-- Backend: `pytest -q 28 passed` (api, workflow, agents/tools/SSE/RAG, maps/ml; mock offline)
+- Backend: `pytest -q 30 passed` (api, workflow, agents/tools/SSE/RAG, rate-limit, maps/ml; mock offline)
 - Frontend: `vitest 14 passed`, `vite build ✓ 37 modules`, `eslint pass`
 
 ## Still Need Manual Config

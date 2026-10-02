@@ -30,7 +30,7 @@ Please delete options that are not relevant.
 ## Testing
 Please describe the tests that you ran to verify your changes.
 
-- [ ] `cd backend && python -m pytest tests/ -q` (51 tests pass)
+- [ ] `cd backend && python -m pytest tests/ -q` (30 tests pass)
 - [ ] `cd frontend && npm run lint`
 - [ ] `cd frontend && npm run build`
 - [ ] Manual testing: [describe what you tested]

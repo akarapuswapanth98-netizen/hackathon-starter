@@ -6,7 +6,7 @@ Base: `http://localhost:8000` (or `VITE_API_URL`)
 
 Response:
 ```json
-{"status":"ok","version":"0.1.0","llm_provider":"mock","llm_model":"gpt-4o-mini","rag_enabled":false,"db_enabled":false,"llm_configured":true}
+{"status":"ok","version":"0.1.0","llm_provider":"mock","llm_model":"openai/gpt-oss-20b","rag_enabled":false,"db_enabled":false,"llm_configured":true}
 ```
 
 ## POST /api/chat
@@ -17,7 +17,7 @@ Request:
 ```
 Response:
 ```json
-{"reply":"...","provider":"mock","model":"gpt-4o-mini","sources":[],"meta":{}}
+{"reply":"...","provider":"mock","model":"openai/gpt-oss-20b","sources":[],"meta":{}}
 ```
 Error if RAG enabled but disabled: 400 `RAG disabled`
 
