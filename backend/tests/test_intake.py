@@ -136,6 +136,150 @@ def test_repair_failure_uses_defaults():
         RI._llm_json = orig
 
 
+def _valid_spec_dict():
+    return {
+        "title": "T", "target_user": "U", "core_problem": "P",
+        "must_have_features": [
+            {"name": "F1", "description": "d1", "data_needed": "s1"},
+            {"name": "F2", "description": "d2", "data_needed": "s2"},
+            {"name": "F3", "description": "d3", "data_needed": "s3"},
+        ],
+        "stretch_goals": ["g1", "g2"],
+        "demo_flow": ["s1", "s2", "s3", "s4"],
+        "judging_criteria_map": {"A": "x", "B": "y", "C": "z"},
+        "suggested_tools": ["text_search"],
+        "risks": ["r1", "r2"],
+    }
+
+
+class _FakeResp:
+    def __init__(self, headers=None):
+        self.headers = headers or {}
+
+
+class _FakeProviderError(Exception):
+    def __init__(self, status_code=None, headers=None, name="FakeProviderError"):
+        self.status_code = status_code
+        self.response = _FakeResp(headers)
+        type(self).__name__ = name
+        super().__init__("SECRET_MARKER_BODY_SHOULD_NEVER_BE_LOGGED " + "x" * 500)
+
+
+def test_classify_provider_error():
+    from app.agents.nodes import _classify_provider_error
+    assert _classify_provider_error(_FakeProviderError(429, {"retry-after": "12"})) == "api_error:429"
+    assert _classify_provider_error(_FakeProviderError(401)) == "api_error:401"
+    assert _classify_provider_error(TimeoutError("timed out")) == "api_error:timeout"
+    assert _classify_provider_error(ValueError("boom")) == "api_error"
+
+
+def test_retry_after_logged_without_body(caplog):
+    import logging
+    import asyncio
+    from app.agents.nodes import _llm_json, PlanSchema
+    from app.ai.llm_service import LLMService
+
+    async def raising_generate(self, *a, **k):
+        raise _FakeProviderError(429, {"retry-after": "12"})
+
+    llm = LLMService(provider="mock")
+    orig = LLMService.generate
+    LLMService.generate = raising_generate
+    try:
+        with caplog.at_level(logging.WARNING, logger="hackathon.nodes"):
+            try:
+                asyncio.run(_llm_json(llm, "p", "s", PlanSchema))
+                assert False, "should raise"
+            except Exception as e:
+                from app.agents.nodes import LLMJSONError
+                assert isinstance(e, LLMJSONError) and e.reason == "api_error:429"
+    finally:
+        LLMService.generate = orig
+    assert "retry_after=12" in caplog.text
+    assert "SECRET_MARKER" not in caplog.text
+
+
+def test_fallback_model_retried_once_on_429(monkeypatch):
+    import asyncio
+    import app.api.routes_intake as RI
+    from app.agents.nodes import LLMJSONError
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("LLM_FALLBACK_MODEL", "openai/gpt-oss-120b")
+    get_settings.cache_clear()
+    seen_models = []
+
+    async def flaky(llm, prompt, system, schema, example=None, max_tokens=400):
+        seen_models.append(llm.model)
+        if len(seen_models) == 1:
+            raise LLMJSONError("api_error:429", "capped")
+        return RI.ProjectSpec.model_validate(_valid_spec_dict())
+
+    orig = RI._llm_json
+    RI._llm_json = flaky
+    try:
+        spec, fallback, reason = asyncio.run(RI.generate_spec("Farmers need advice."))
+        assert fallback == "llm" and reason == "none"
+        assert spec.title == "T"
+        assert seen_models[1] == "openai/gpt-oss-120b"
+    finally:
+        RI._llm_json = orig
+        monkeypatch.undo()
+        get_settings.cache_clear()
+
+
+def test_no_fallback_model_without_env(monkeypatch):
+    import asyncio
+    import app.api.routes_intake as RI
+    from app.agents.nodes import LLMJSONError
+    from app.core.config import get_settings
+
+    monkeypatch.delenv("LLM_FALLBACK_MODEL", raising=False)
+    get_settings.cache_clear()
+    calls = []
+
+    async def capped(llm, prompt, system, schema, example=None, max_tokens=400):
+        calls.append(1)
+        raise LLMJSONError("api_error:429", "capped")
+
+    orig = RI._llm_json
+    RI._llm_json = capped
+    try:
+        spec, fallback, reason = asyncio.run(RI.generate_spec("Farmers need advice."))
+        assert fallback == "heuristic" and reason == "api_error:429"
+        assert calls == [1]  # single attempt, no fallback-model retry
+    finally:
+        RI._llm_json = orig
+        monkeypatch.undo()
+        get_settings.cache_clear()
+
+
+def test_no_fallback_retry_on_non_429(monkeypatch):
+    import asyncio
+    import app.api.routes_intake as RI
+    from app.agents.nodes import LLMJSONError
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("LLM_FALLBACK_MODEL", "openai/gpt-oss-120b")
+    get_settings.cache_clear()
+    calls = []
+
+    async def denied(llm, prompt, system, schema, example=None, max_tokens=400):
+        calls.append(1)
+        raise LLMJSONError("api_error:401", "bad key")
+
+    orig = RI._llm_json
+    RI._llm_json = denied
+    try:
+        spec, fallback, reason = asyncio.run(RI.generate_spec("Farmers need advice."))
+        assert fallback == "heuristic" and reason == "api_error:401"
+        assert calls == [1]
+    finally:
+        RI._llm_json = orig
+        monkeypatch.undo()
+        get_settings.cache_clear()
+
+
 def test_int_valued_map_gets_replaced_not_500():
     """Model returning int scores (usability:3) must not 500: replace with defaults."""
     import asyncio
