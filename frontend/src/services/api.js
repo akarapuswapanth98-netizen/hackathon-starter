@@ -76,15 +76,6 @@ export const api = {
   health: () => request('/api/health'),
   chat: (payload) => request('/api/chat', { method: 'POST', body: payload }),
   solve: (payload) => request('/api/solve', { method: 'POST', body: payload }),
-  // --- FoodBridge (reuses BASE_URL / timeout / error handling above) ---
-  foodbridgeRestaurants: () => request('/api/foodbridge/restaurants'),
-  foodbridgeShelters: () => request('/api/foodbridge/shelters'),
-  foodbridgeSurplus: (restaurant_id) =>
-    request(restaurant_id ? `/api/foodbridge/surplus?restaurant_id=${encodeURIComponent(restaurant_id)}` : '/api/foodbridge/surplus'),
-  foodbridgeCreateSurplus: (payload) => request('/api/foodbridge/surplus', { method: 'POST', body: payload }),
-  foodbridgeMatch: (payload) => request('/api/foodbridge/match', { method: 'POST', body: payload }),
-  foodbridgeEvents: (workflow_id) =>
-    request(workflow_id ? `/api/foodbridge/agents/events?workflow_id=${encodeURIComponent(workflow_id)}` : '/api/foodbridge/agents/events'),
   upload: async (file) => {
     const form = new FormData()
     form.append('file', file)

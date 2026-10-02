@@ -1,39 +1,20 @@
 # Hackathon Starter - Demo Commands
-# Usage: make demo  (or: make demo-backend, make demo-full)
 
-.PHONY: demo demo-backend demo-full install-backend install-frontend test lint
+.PHONY: demo demo-backend install-backend install-frontend test lint
 
-# Full demo: start backend, run match, reset, run match again, show endpoints
-demo: install-backend
-	@echo "=== Starting FoodBridge demo ==="
+# Full demo: health, chat, solve (mock + agents), upload
+demo:
+	@echo "=== Hackathon Starter Demo ==="
 	@cd backend && python -m uvicorn app.main:app --port 8000 --host 0.0.0.0 & \
 	sleep 3 && \
 	echo "--- Health check ---" && \
 	curl -s http://localhost:8000/api/health | python -m json.tool && \
 	echo "" && \
-	echo "--- Restaurants ---" && \
-	curl -s http://localhost:8000/api/foodbridge/restaurants | python -m json.tool && \
+	echo "--- Chat (mock) ---" && \
+	curl -s -X POST http://localhost:8000/api/chat -H "Content-Type: application/json" -d '{"message":"Hello"}' | python -m json.tool && \
 	echo "" && \
-	echo "--- First match (consumes lot) ---" && \
-	curl -s -X POST http://localhost:8000/api/foodbridge/match \
-	  -H "Content-Type: application/json" \
-	  -d '{"surplus_id":"food-001"}' | python -m json.tool && \
-	echo "" && \
-	echo "--- Second match (409 - lot consumed) ---" && \
-	curl -s -X POST http://localhost:8000/api/foodbridge/match \
-	  -H "Content-Type: application/json" \
-	  -d '{"surplus_id":"food-001"}' | python -m json.tool && \
-	echo "" && \
-	echo "--- Demo reset ---" && \
-	curl -s -X POST http://localhost:8000/api/foodbridge/demo/reset | python -m json.tool && \
-	echo "" && \
-	echo "--- Surplus after reset (available again) ---" && \
-	curl -s http://localhost:8000/api/foodbridge/surplus | python -m json.tool && \
-	echo "" && \
-	echo "--- Match again after reset ---" && \
-	curl -s -X POST http://localhost:8000/api/foodbridge/match \
-	  -H "Content-Type: application/json" \
-	  -d '{"surplus_id":"food-001"}' | python -m json.tool && \
+	echo "--- Solve with agents (mock) ---" && \
+	curl -s -X POST http://localhost:8000/api/solve -H "Content-Type: application/json" -d '{"query":"Summarize RAG impact","use_agents":true}' | python -m json.tool && \
 	kill %1 2>/dev/null || true && \
 	echo "=== Demo complete ==="
 
@@ -41,16 +22,12 @@ demo: install-backend
 demo-backend:
 	@echo "=== Backend demo (server must be running on :8000) ==="
 	@curl -s http://localhost:8000/api/health | python -m json.tool
-	@curl -s http://localhost:8000/api/foodbridge/restaurants | python -m json.tool
-	@curl -s -X POST http://localhost:8000/api/foodbridge/match -H "Content-Type: application/json" -d '{"surplus_id":"food-001"}' | python -m json.tool
-	@curl -s -X POST http://localhost:8000/api/foodbridge/match -H "Content-Type: application/json" -d '{"surplus_id":"food-001"}' | python -m json.tool
-	@curl -s -X POST http://localhost:8000/api/foodbridge/demo/reset | python -m json.tool
-	@curl -s http://localhost:8000/api/foodbridge/surplus | python -m json.tool
-	@curl -s -X POST http://localhost:8000/api/foodbridge/match -H "Content-Type: application/json" -d '{"surplus_id":"food-001"}' | python -m json.tool
+	@curl -s -X POST http://localhost:8000/api/chat -H "Content-Type: application/json" -d '{"message":"Hello"}' | python -m json.tool
+	@curl -s -X POST http://localhost:8000/api/solve -H "Content-Type: application/json" -d '{"query":"Hello","use_agents":true}' | python -m json.tool
 
 # Install backend dependencies
 install-backend:
-	@cd backend && python -m venv venv && . venv/bin/activate && pip install -r requirements.txt
+	@cd backend && python -m pip install -r requirements.txt
 
 # Install frontend dependencies
 install-frontend:
@@ -58,9 +35,9 @@ install-frontend:
 
 # Run all tests
 test:
-	@cd backend && . venv/bin/activate && pytest tests/ -q
+	@cd backend && python -m pytest tests/ -q
 
 # Lint (both)
 lint:
 	@cd frontend && npm run lint 2>/dev/null || echo "no frontend lint"
-	@cd backend && . venv/bin/activate && python -m flake8 . 2>/dev/null || echo "no backend lint"
+	@cd backend && python -m flake8 . 2>/dev/null || echo "no backend lint"

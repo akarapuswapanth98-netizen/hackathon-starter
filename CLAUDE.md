@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-**hackathon-starter** is a full-stack TypeScript/Python monorepo for rapid hackathon development. FastAPI backend with LangGraph multi-agent workflows (FoodBridge) + Vite/React frontend.
+**hackathon-starter** is a full-stack Python/React monorepo for rapid hackathon development. FastAPI backend with LangGraph agent workflow + Vite/React frontend.
 
 For detailed guidelines, see [AGENTS.md](AGENTS.md).
 
@@ -13,7 +13,7 @@ For detailed guidelines, see [AGENTS.md](AGENTS.md).
 ```bash
 # Backend
 cd backend
-python -m pytest tests/ -q              # Run tests (51 expected)
+python -m pytest tests/ -q              # Run tests
 uvicorn app.main:app --port 8000        # Start server
 
 # Frontend
@@ -31,46 +31,42 @@ make demo           # Linux/macOS
 
 | File | Purpose |
 |------|---------|
-| `backend/app/foodbridge/agents.py` | 6 agents + terminals |
-| `backend/app/foodbridge/workflow.py` | LangGraph + fallback |
-| `backend/app/foodbridge/store.py` | In-memory store + lifecycle |
-| `backend/app/foodbridge/scoring.py` | Pure matching math |
-| `backend/app/api/routes_foodbridge.py` | HTTP endpoints |
+| `backend/app/agents/workflow.py` | LangGraph agent loop + fallback |
+| `backend/app/agents/tools.py` | Tool registry |
+| `backend/app/ai/llm_service.py` | Provider-agnostic LLM |
+| `backend/app/api/routes_chat.py` | Chat endpoint |
+| `backend/app/api/routes_solve.py` | Solve + agents + SSE |
+| `backend/app/api/routes_upload.py` | File upload + RAG ingest |
 | `backend/app/core/config.py` | All settings |
-| `backend/tests/test_foodbridge.py` | 45 FoodBridge tests |
-| `backend/tests/test_openapi_contract.py` | 6 contract tests |
-| `docs/foodbridge.md` | Architecture docs |
+| `backend/tests/test_api.py` | API tests |
 | `docs/api-contract.md` | API contract |
 | `frontend/src/services/api.js` | API client |
 
-## FoodBridge Endpoints
+## Endpoints
 
 ```
-GET  /api/foodbridge/restaurants
-GET  /api/foodbridge/shelters
-GET  /api/foodbridge/surplus?include_all=false
-POST /api/foodbridge/surplus          # 201
-POST /api/foodbridge/match            # 200 or 409
-GET  /api/foodbridge/agents/events
-POST /api/foodbridge/demo/reset       # Demo only
+GET  /api/health
+POST /api/chat
+POST /api/solve              # use_agents=true runs agent graph, returns steps
+POST /api/solve/stream       # SSE agent steps
+POST /api/upload             # file + RAG ingest
 ```
 
 ## Code Patterns
 
 ### Python
-- Type hints everywhere (strict)
+- Type hints everywhere
 - Pure functions for agents, TypedDict state
 - Pydantic v2 for all API schemas
-- In-memory store with lifecycle (consume-on-match)
 
-### React/TypeScript
+### React
 - Single API client in `src/services/api.js`
 - Page-level data fetching
-- ESLint + TypeScript strict
+- ESLint
 
 ## Before Committing
 
-1. Backend: `cd backend && python -m pytest tests/ -q` (51 passing)
+1. Backend: `cd backend && python -m pytest tests/ -q`
 2. Frontend: `cd frontend && npm run lint`
 3. Never commit secrets (use `.env`)
 
@@ -80,15 +76,8 @@ Backend `.env`:
 ```bash
 LLM_PROVIDER=mock          # mock | openai | groq | anthropic | gemini
 LLM_API_KEY=               # Required for real providers
-MATCH_W_DISTANCE=0.50
-MATCH_W_DEMAND=0.10
-MATCH_W_URGENCY=0.15
-MATCH_W_CAPACITY=0.05
-MATCH_W_COMPATIBILITY=0.10
-MATCH_W_EXPIRY=0.10
-MATCH_TIMEOUT_SECONDS=10
-MATCH_MAX_RETRIES=1
-FOODBRIDGE_DEMO_MODE=auto
+RAG_ENABLED=false
+AUTH_ENABLED=false
 ```
 
 ## Demo Flow
@@ -97,34 +86,13 @@ FOODBRIDGE_DEMO_MODE=auto
 # 1. Start backend
 cd backend && uvicorn app.main:app --port 8000
 
-# 2. Run match (consumes lot)
-curl -X POST http://localhost:8000/api/foodbridge/match \
+# 2. Chat
+curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"surplus_id":"food-001"}'
+  -d '{"message":"Hello"}'
 
-# 3. Repeat match → 409 (lot consumed)
-# 4. Reset demo
-curl -X POST http://localhost:8000/api/foodbridge/demo/reset
-
-# 5. Match again → success
-```
-
-## Project Structure
-
-```
-backend/
-├── app/foodbridge/     # Multi-agent system
-│   ├── agents.py       # 6 agents + terminals
-│   ├── workflow.py     # LangGraph + fallback
-│   ├── store.py        # In-memory + lifecycle
-│   ├── scoring.py      # Deterministic math
-│   └── models.py       # Pydantic schemas
-├── api/routes_foodbridge.py
-├── core/config.py
-└── tests/              # 51 tests
-
-frontend/
-├── src/services/api.js  # Single API client
-├── src/pages/           # Page components
-└── src/components/      # Reusable components
+# 3. Solve with agents
+curl -X POST http://localhost:8000/api/solve \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Summarize RAG impact","use_agents":true}'
 ```

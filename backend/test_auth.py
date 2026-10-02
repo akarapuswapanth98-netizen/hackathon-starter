@@ -1,4 +1,4 @@
-"""Test script for JWT authentication."""
+"""Smoke script for auth OFF default + health/root."""
 import sys
 sys.path.insert(0, '.')
 
@@ -7,30 +7,19 @@ from app.main import app
 
 client = TestClient(app)
 
-print("Testing authentication endpoints...")
+print("Testing authentication defaults...")
 
-# Test that auth routes exist when AUTH_ENABLED=true
-# First check if auth routes are included
 from app.core.config import get_settings
 s = get_settings()
 print(f"AUTH_ENABLED: {s.AUTH_ENABLED}")
+assert s.AUTH_ENABLED is False, "AUTH_ENABLED must default to False"
 
-# Test health endpoint (should always work)
 r = client.get("/api/health")
 print(f"GET /api/health: status={r.status_code}, body={r.json()}")
+assert r.status_code == 200
 
-# Test foodbridge endpoints (should always work)
-r = client.get("/api/foodbridge/restaurants")
-print(f"GET /api/foodbridge/restaurants: status={r.status_code}")
-
-r = client.get("/api/foodbridge/surplus")
-print(f"GET /api/foodbridge/surplus: status={r.status_code}")
-
-r = client.post("/api/foodbridge/match", json={"surplus_id": "food-001"})
-print(f"POST /api/foodbridge/match: status={r.status_code}")
-
-# Test root endpoint
 r = client.get("/")
 print(f"GET /: status={r.status_code}, body={r.json()}")
+assert r.status_code == 200
 
-print("\nAuthentication test PASSED!")
+print("\nAuthentication default test PASSED!")

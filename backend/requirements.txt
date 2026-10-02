@@ -6,9 +6,9 @@ python-dotenv==1.2.3
 httpx==0.28.1
 pytest==9.1.1
 # pytest-asyncio==0.24.0  # disabled: requires pytest<9, conflicts with pytest==9.1.1 above;
-  # FoodBridge tests use asyncio.run (no async test funcs), dev env has no pytest-asyncio installed
-httpx==0.28.1
+  # Backend tests use asyncio.run (no async test funcs)
 python-multipart==0.0.32  # required: app uses FastAPI Form (upload route); missing it breaks import
+python-jose[cryptography]==3.5.0  # JWT auth (optional, only used when AUTH_ENABLED=true)
 
 # Database - SQLAlchemy for persistent storage (SQLite default, PostgreSQL-ready)
 sqlalchemy==2.0.32

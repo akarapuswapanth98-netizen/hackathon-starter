@@ -28,6 +28,10 @@ dist-ssr/
 !.env.example
 backend/.env
 frontend/.env
+backend/uploads/
+uploads/
+data/
+backend/data/
 
 # OS
 .DS_Store

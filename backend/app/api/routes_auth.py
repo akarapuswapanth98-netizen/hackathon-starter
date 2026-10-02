@@ -12,6 +12,7 @@ when authentication fails.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
+from datetime import timedelta
 from typing import Dict
 
 from app.core.config import get_settings

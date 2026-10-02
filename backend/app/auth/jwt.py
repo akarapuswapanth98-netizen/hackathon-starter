@@ -19,6 +19,13 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
+def _require_secret() -> str:
+    secret = settings.JWT_SECRET or ""
+    if not secret:
+        raise RuntimeError("JWT_SECRET is unset. Set JWT_SECRET env var or keep AUTH_ENABLED=false.")
+    return secret
+
+
 def create_access_token(
     subject: Union[str, Any],
     expires_delta: Optional[timedelta] = None,
@@ -50,7 +57,7 @@ def create_access_token(
 
     encoded_jwt = jwt.encode(
         to_encode,
-        settings.JWT_SECRET or "your-secret-key-change-in-production",
+        _require_secret(),
         algorithm=settings.JWT_ALGORITHM,
     )
 
@@ -73,7 +80,7 @@ def decode_access_token(
     try:
         payload = jwt.decode(
             token,
-            settings.JWT_SECRET or "your-secret-key-change-in-production",
+            _require_secret(),
             algorithms=[settings.JWT_ALGORITHM],
         )
         return payload
@@ -174,14 +181,13 @@ def authenticate_user(
     Returns:
         AuthUser if authentication succeeds, None otherwise
     """
-    # Default implementation - in production, this would check against a DB
-    # For now, we accept a simple static check
-    # TODO: Replace with real user database authentication
-    if username == "admin" and password == "admin123":
-        return AuthUser(user_id="1", username="admin", roles=["admin", "user"])
-    elif username == "user" and password == "user123":
-        return AuthUser(user_id="2", username="user", roles=["user"])
-
+    # No hardcoded users. Provide user_db with verify logic or wire your own DB.
+    # Auth stays OFF unless AUTH_ENABLED=true + JWT_SECRET set (see app/main.py).
+    if user_db is None:
+        return None
+    verify = getattr(user_db, "verify_user", None)
+    if callable(verify):
+        return verify(username, password)
     return None
 
 

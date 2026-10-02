@@ -52,6 +52,9 @@ def create_app() -> FastAPI:
     # --- JWT Authentication (optional, env-driven) ---
     auth_enabled = s.AUTH_ENABLED
 
+    if auth_enabled and not (s.JWT_SECRET or "").strip():
+        raise RuntimeError("AUTH_ENABLED=true requires JWT_SECRET env var to be set.")
+
     if auth_enabled and AUTH_ROUTES_AVAILABLE:
         # Auth routes
         app.include_router(auth_router, prefix="/api", tags=["auth"])
