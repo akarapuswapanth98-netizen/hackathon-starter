@@ -71,6 +71,92 @@ def test_fallback_reason_values():
     assert j["fallback_reason"] == "bad_json"
 
 
+def _core_partial():
+    return {
+        "title": "Clinic Helper",
+        "target_user": "Clinic staff",
+        "core_problem": "Triage patient messages quickly",
+        "must_have_features": [
+            {"name": "F1", "description": "d1", "data_needed": "seed1"},
+            {"name": "F2", "description": "d2", "data_needed": "seed2"},
+            {"name": "F3", "description": "d3", "data_needed": "seed3"},
+        ],
+        "stretch_goals": [],
+        "demo_flow": ["s1", "s2", "s3", "s4"],
+        "judging_criteria_map": {},
+        "suggested_tools": ["text_search"],
+        "risks": [],
+    }
+
+
+def test_partial_repair_keeps_core():
+    import asyncio
+    import app.api.routes_intake as RI
+    from app.agents.nodes import LLMJSONError
+
+    async def flaky(llm, prompt, system, schema, example=None, max_tokens=400):
+        if schema.__name__ == "ProjectSpec":
+            raise LLMJSONError("wrong_shape", "empty lists", partial=_core_partial())
+        # Repair call: return valid gap fill.
+        return schema.model_validate({
+            "stretch_goals": ["Voice input", "SMS alerts"],
+            "judging_criteria_map": {"A": "x", "B": "y", "C": "z"},
+            "risks": ["r1", "r2"],
+        })
+
+    orig = RI._llm_json
+    RI._llm_json = flaky
+    try:
+        spec, fallback, reason = asyncio.run(RI.generate_spec("Clinic triage help."))
+        assert fallback == "partial_repair" and reason == "wrong_shape"
+        assert spec.title == "Clinic Helper"  # original core kept
+        assert [f.name for f in spec.must_have_features] == ["F1", "F2", "F3"]
+        assert spec.stretch_goals == ["Voice input", "SMS alerts"]  # repaired, not defaults
+    finally:
+        RI._llm_json = orig
+
+
+def test_repair_failure_uses_defaults():
+    import asyncio
+    import app.api.routes_intake as RI
+    from app.agents.nodes import LLMJSONError
+
+    async def always_bad(llm, prompt, system, schema, example=None, max_tokens=400):
+        raise LLMJSONError("wrong_shape", "empty", partial=_core_partial())
+
+    orig = RI._llm_json
+    RI._llm_json = always_bad
+    try:
+        spec, fallback, reason = asyncio.run(RI.generate_spec("Clinic triage help."))
+        assert fallback == "partial_repair"
+        assert spec.title == "Clinic Helper"
+        assert spec.stretch_goals == ["Local-language input", "Voice input"]  # deterministic defaults
+        assert len(spec.judging_criteria_map) == 3 and len(spec.risks) == 3
+    finally:
+        RI._llm_json = orig
+
+
+def test_full_heuristic_only_when_core_invalid():
+    import asyncio
+    import app.api.routes_intake as RI
+    from app.agents.nodes import LLMJSONError
+
+    bad = _core_partial()
+    bad["must_have_features"] = bad["must_have_features"][:2]  # core invalid
+
+    async def bad_core(llm, prompt, system, schema, example=None, max_tokens=400):
+        raise LLMJSONError("wrong_shape", "short features", partial=bad)
+
+    orig = RI._llm_json
+    RI._llm_json = bad_core
+    try:
+        spec, fallback, reason = asyncio.run(RI.generate_spec("Clinic triage help."))
+        assert fallback == "heuristic" and reason == "wrong_shape"
+        assert len(spec.must_have_features) == 3
+    finally:
+        RI._llm_json = orig
+
+
 def test_intake_empty_and_oversized():
     assert client.post("/api/intake", json={"problem": "   "}).status_code == 422
     assert client.post("/api/intake", json={"problem": "z" * 9000}).status_code == 422
