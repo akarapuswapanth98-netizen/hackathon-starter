@@ -63,6 +63,19 @@ def _extract_json_object(text: str) -> str:
     return text
 
 
+class LLMJSONError(ValueError):
+    """Structured JSON failure with a machine-readable reason (never includes secrets)."""
+
+    def __init__(self, reason: str, detail: str = ""):
+        self.reason = reason
+        super().__init__(detail or reason)
+
+
+def _looks_truncated(raw: str, max_tokens: int) -> bool:
+    """Best-effort: long reply with no balanced object probably hit the token cap."""
+    return len(raw) >= max_tokens * 3 and _extract_json_object(raw) == raw and "{" in raw
+
+
 async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[BaseModel],
                    example: dict | None = None, max_tokens: int = 400) -> BaseModel:
     """Call LLM in JSON mode, parse + strict key-check, one corrective retry.
@@ -84,26 +97,39 @@ async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[Base
         example = {k: ("<string>" if k != "steps" else ["<step>"]) for k in keys}
     ex = json.dumps(example)[:800]
     sys = system + f" Output ONLY a JSON object with exactly these keys: {keys}. Example: {ex}. Do NOT solve or answer the user's problem."
-    raw = await llm.generate(prompt, system=sys, temperature=0.0, max_tokens=max_tokens, json_mode=True)
+    try:
+        raw = await llm.generate(prompt, system=sys, temperature=0.0, max_tokens=max_tokens, json_mode=True)
+    except Exception as e:
+        raise LLMJSONError("api_error", f"provider call failed: {type(e).__name__}") from e
     text = _extract_json_object(raw.strip())
+    last_err: Exception | None = None
     for attempt in range(2):
         try:
             data = json.loads(text)
             if isinstance(data, dict) and all(k in data for k in keys):
                 return schema.model_validate(data)
             raise ValueError(f"missing keys (need {keys})")
-        except (json.JSONDecodeError, ValidationError, ValueError) as e:
+        except Exception as e:  # JSONDecodeError, ValidationError, ValueError
+            last_err = e
             logger.warning("_llm_json attempt=%d schema=%s err=%s raw=%.120s", attempt, schema.__name__, e, text)
             if attempt == 0:
                 # Corrective note names the exact failure (e.g. empty list where 2-3 items required).
-                raw2 = await llm.generate(
-                    f"You returned: {text[:800]}\nProblem with it: {str(e)[:300]}\n"
-                    f"Rewrite it as a JSON object with EXACTLY these keys {keys} (all required lists/dicts must be non-empty per the schema). Example: {ex}. No other text.",
-                    system="Output ONLY JSON.", temperature=0.0, max_tokens=max_tokens, json_mode=True,
-                )
+                note = f"\nProblem with it: {str(e)[:300]}" if isinstance(e, (ValidationError, ValueError)) else ""
+                try:
+                    raw2 = await llm.generate(
+                        f"You returned: {text[:800]}{note}\n"
+                        f"Rewrite it as a JSON object with EXACTLY these keys {keys} (all required lists/dicts must be non-empty per the schema). Example: {ex}. No other text.",
+                        system="Output ONLY JSON.", temperature=0.0, max_tokens=max_tokens, json_mode=True,
+                    )
+                except Exception as e2:
+                    raise LLMJSONError("api_error", f"provider call failed: {type(e2).__name__}") from e2
                 text = _extract_json_object(raw2.strip())
-    # Fallback: raise to let caller use deterministic default
-    raise ValueError(f"Could not get valid {schema.__name__} JSON")
+    # Both attempts failed: classify for the caller's fallback reporting.
+    if _looks_truncated(raw, max_tokens):
+        raise LLMJSONError("truncated", f"reply looked cut off at ~{max_tokens} tokens")
+    if isinstance(last_err, json.JSONDecodeError):
+        raise LLMJSONError("bad_json", "no parseable JSON object in reply")
+    raise LLMJSONError("wrong_shape", str(last_err)[:200] if last_err else "schema validation failed")
 
 
 def _record(state: dict, node: str, inp: str, out: str, tool_name: str = "", duration_ms: float = 0.0) -> dict:

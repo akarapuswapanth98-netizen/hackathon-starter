@@ -85,7 +85,7 @@ def main() -> int:
             return 1
 
     from app.api.routes_intake import generate_spec
-    spec, fallback = asyncio.run(generate_spec(problem))
+    spec, fallback, reason = asyncio.run(generate_spec(problem))
     f = spec.must_have_features
     with open(SPEC_PATH, "w", encoding="utf-8") as fh:
         fh.write(render_spec_md(spec, fallback))
@@ -93,7 +93,7 @@ def main() -> int:
         fh.write(BUILD_PLAN_TEMPLATE.format(
             title=spec.title, f1=f[0].name, f1d=f[0].description,
             f2=f[1].name, f2d=f[1].description, f3=f[2].name, f3d=f[2].description))
-    print(f"wrote {SPEC_PATH} + {PLAN_PATH} ({fallback} mode)")
+    print(f"wrote {SPEC_PATH} + {PLAN_PATH} ({fallback} mode, reason={reason})")
     return 0
 
 

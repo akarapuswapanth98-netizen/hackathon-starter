@@ -48,6 +48,7 @@ class IntakeResponse(BaseModel):
     success: bool = True
     spec: ProjectSpec
     fallback: str = "llm"  # llm | heuristic
+    fallback_reason: str = "none"  # none | truncated | bad_json | wrong_shape | api_error
     total_duration_ms: float = 0.0
 
 
@@ -167,13 +168,20 @@ async def intake(req: IntakeRequest):
         raise HTTPException(status_code=422, detail="problem too long (max 8000 chars)")
 
     t0 = time.perf_counter()
-    spec, fallback = await generate_spec(problem, criteria=req.criteria)
+    spec, fallback, reason = await generate_spec(problem, criteria=req.criteria)
     total_ms = round((time.perf_counter() - t0) * 1000, 1)
-    return IntakeResponse(success=True, spec=spec, fallback=fallback, total_duration_ms=total_ms)
+    logger.info("intake fallback=%s reason=%s", fallback, reason)
+    return IntakeResponse(success=True, spec=spec, fallback=fallback,
+                          fallback_reason=reason, total_duration_ms=total_ms)
 
 
-async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[ProjectSpec, str]:
-    """Shared spec builder used by the endpoint AND backend/scripts/scaffold.py."""
+async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[ProjectSpec, str, str]:
+    """Shared spec builder used by the endpoint AND backend/scripts/scaffold.py.
+
+    Returns (spec, fallback, reason). reason is one of
+    none | truncated | bad_json | wrong_shape | api_error.
+    """
+    from app.agents.nodes import LLMJSONError
     crit = (criteria or "").strip()
     try:
         llm = LLMService()
@@ -191,13 +199,16 @@ async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[P
             "You write hackathon project specs.",
             ProjectSpec,
             example=INTAKE_EXAMPLE,
-            max_tokens=1200,
+            max_tokens=2000,
         )
         # Guardrail: suggested tools must exist in the kit.
         spec.suggested_tools = [t for t in spec.suggested_tools if t in TOOL_REGISTRY][:4]
         if not spec.suggested_tools:
             spec.suggested_tools = _pick_tools(problem)
-        return spec, "llm"
+        return spec, "llm", "none"
+    except LLMJSONError as e:
+        logger.warning("intake LLM failed (%s), heuristic fallback", e.reason)
+        return heuristic_spec(problem, criteria), "heuristic", e.reason
     except Exception as e:
-        logger.warning("intake LLM failed, heuristic fallback: %s", e)
-        return heuristic_spec(problem, criteria), "heuristic"
+        logger.warning("intake failed (%s), heuristic fallback: %s", type(e).__name__, e)
+        return heuristic_spec(problem, criteria), "heuristic", "api_error"
