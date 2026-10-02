@@ -22,6 +22,8 @@ router = APIRouter()
 class Feature(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
     description: str = Field(..., min_length=1, max_length=200)
+    data_needed: str = Field(..., min_length=1, max_length=200,
+                             description="Seed/demo data this feature needs, e.g. 'seed file of 10 fake specialists in docs/seed/'")
 
 
 class ProjectSpec(BaseModel):
@@ -38,6 +40,8 @@ class ProjectSpec(BaseModel):
 
 class IntakeRequest(BaseModel):
     problem: str
+    criteria: Optional[str] = Field(None, max_length=2000,
+                                    description="Judging criteria text; when given, judging_criteria_map must use these criteria")
 
 
 class IntakeResponse(BaseModel):
@@ -52,15 +56,15 @@ INTAKE_EXAMPLE = {
     "target_user": "Rural clinic staff triaging patient messages",
     "core_problem": "Staff cannot quickly tell which patient messages are urgent",
     "must_have_features": [
-        {"name": "Message intake", "description": "Paste a patient message, get an urgency label"},
-        {"name": "Urgency badge", "description": "Critical/high/normal badge with reason in the UI"},
-        {"name": "RAG answers", "description": "Upload clinic policy docs, cite them in replies"},
+        {"name": "Message intake", "description": "Paste a patient message, get an urgency label", "data_needed": "seed file of 20 sample patient messages in docs/seed/"},
+        {"name": "Urgency badge", "description": "Critical/high/normal badge with reason in the UI", "data_needed": "no seed data (rule output only)"},
+        {"name": "RAG answers", "description": "Upload clinic policy docs, cite them in replies", "data_needed": "seed file of 1 clinic policy PDF in docs/seed/"},
     ],
-    "stretch_goals": ["Telugu input support"],
+    "stretch_goals": ["Telugu input support", "Voice input for messages"],
     "demo_flow": ["Paste message", "See urgency badge", "Upload policy doc", "Ask a question", "Show cited answer"],
-    "judging_criteria_map": {"Innovation": "Rule + LLM hybrid triage", "Execution": "Working demo, no stubs"},
+    "judging_criteria_map": {"Innovation": "Rule + LLM hybrid triage", "Execution": "Working demo, no stubs", "Demo clarity": "3-minute message-to-answer flow"},
     "suggested_tools": ["text_search", "get_current_time"],
-    "risks": ["Long inputs slow the demo — cap at 8000 chars"],
+    "risks": ["Long inputs slow the demo — cap at 8000 chars", "Empty document store makes text_search useless — seed one doc"],
 }
 
 _KNOWN_TOOLS = ["calculator", "text_search", "get_current_time", "classify_urgency"]
@@ -82,20 +86,61 @@ def _pick_tools(problem: str) -> list[str]:
     return picked[:3] or [t for t in ("text_search", "get_current_time") if t in available][:2]
 
 
-def heuristic_spec(problem: str) -> ProjectSpec:
+# Honest one-line limits per tool. Features may only claim what these do;
+# anything else must name its seed data in data_needed.
+_TOOL_CAVEATS = {
+    "text_search": "searches ONLY documents previously uploaded via /api/upload (or seeded); empty store = no results",
+    "get_current_time": "returns the current UTC time only; no scheduling or lookup",
+    "calculator": "evaluates an explicit arithmetic expression string only; does not choose the formula",
+    "classify_urgency": "keyword rules only (dry-run demo tool); no ML, no medical advice",
+}
+
+
+def _tool_capabilities() -> str:
+    lines = []
+    for name in sorted(TOOL_REGISTRY):
+        desc = str(TOOL_REGISTRY[name].get("description", ""))
+        caveat = _TOOL_CAVEATS.get(name, "as described; no external access")
+        lines.append(f"- {name}: {desc} LIMIT: {caveat}.")
+    return "\n".join(lines)
+
+
+def _criteria_keys(criteria: str) -> list[str]:
+    """Split free-text criteria into short map keys (deterministic, heuristic path)."""
+    parts = [p.strip(" -•\t0123456789.)") for p in criteria.replace(";", "\n").splitlines()]
+    parts = [p[:80] for p in parts if len(p) >= 3][:4]
+    if len(parts) < 3:
+        words = criteria.split()
+        parts = [" ".join(words[:8]), "Execution quality", "Demo clarity"][:3]
+    return parts[:4]
+
+
+def heuristic_spec(problem: str, criteria: Optional[str] = None) -> ProjectSpec:
     """Deterministic fallback spec. Always valid, clearly generic."""
     p = " ".join(problem.split())
     title = (p[:57] + "...") if len(p) > 60 else p
+    if criteria and criteria.strip():
+        keys = _criteria_keys(criteria)
+        cmap = {k: "Addressed by the demo flow + agent trace (refine for finals)" for k in keys}
+    else:
+        cmap = {
+            "Innovation": "Agent loop with tools, traceable steps",
+            "Execution": "Working mock-mode demo, no stubs",
+            "Demo": "3-minute solve -> upload -> RAG answer flow",
+        }
     return ProjectSpec(
         title=title,
         target_user="Hackathon end-user (refine after problem reveal)",
         core_problem=p[:1000],
         must_have_features=[
-            Feature(name="Problem solver", description="Paste the problem in Home.jsx, get an agent answer with steps"),
-            Feature(name="Document Q&A", description="Upload PDF/TXT via /api/upload, ask with Use RAG on, show sources"),
-            Feature(name="Live demo timeline", description="Stream agent steps via /api/solve/stream into the UI timeline"),
+            Feature(name="Problem solver", description="Paste the problem in Home.jsx, get an agent answer with steps",
+                    data_needed="no seed data (works on any pasted text)"),
+            Feature(name="Document Q&A", description="Upload PDF/TXT via /api/upload, ask with Use RAG on, show sources",
+                    data_needed="seed file of 1 sample PDF/TXT in docs/seed/"),
+            Feature(name="Live demo timeline", description="Stream agent steps via /api/solve/stream into the UI timeline",
+                    data_needed="no seed data (uses live trace)"),
         ],
-        stretch_goals=["Local-language input"],
+        stretch_goals=["Local-language input", "Voice input"],
         demo_flow=[
             "Paste the problem statement",
             "Run Solve and show the agent timeline",
@@ -103,11 +148,7 @@ def heuristic_spec(problem: str) -> ProjectSpec:
             "Ask a document-grounded question",
             "Show sources + copy the result",
         ],
-        judging_criteria_map={
-            "Innovation": "Agent loop with tools, traceable steps",
-            "Execution": "Working mock-mode demo, no stubs",
-            "Demo": "3-minute solve -> upload -> RAG answer flow",
-        },
+        judging_criteria_map=cmap,
         suggested_tools=_pick_tools(problem),
         risks=[
             "Keep inputs under 8000 chars or the API rejects them",
@@ -126,19 +167,27 @@ async def intake(req: IntakeRequest):
         raise HTTPException(status_code=422, detail="problem too long (max 8000 chars)")
 
     t0 = time.perf_counter()
-    spec, fallback = await generate_spec(problem)
+    spec, fallback = await generate_spec(problem, criteria=req.criteria)
     total_ms = round((time.perf_counter() - t0) * 1000, 1)
     return IntakeResponse(success=True, spec=spec, fallback=fallback, total_duration_ms=total_ms)
 
 
-async def generate_spec(problem: str) -> tuple[ProjectSpec, str]:
+async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[ProjectSpec, str]:
     """Shared spec builder used by the endpoint AND backend/scripts/scaffold.py."""
+    crit = (criteria or "").strip()
     try:
         llm = LLMService()
+        prompt = (
+            f"Problem statement:\n{problem}\n\nScope: must be achievable in 24 hours. "
+            f"Exactly 3 must-have features, each demoable live. "
+            f"Each feature needs data_needed naming its seed/demo data.\n"
+            f"Tool capabilities (features may ONLY claim what these do; anything else needs seed data):\n{_tool_capabilities()}"
+        )
+        if crit:
+            prompt += f"\nJudging criteria (judging_criteria_map keys MUST be exactly these):\n{crit[:2000]}"
         spec = await _llm_json(
             llm,
-            f"Problem statement:\n{problem}\n\nScope: must be achievable in 24 hours. "
-            f"Exactly 3 must-have features, each demoable live. Prefer these existing tools: {sorted(TOOL_REGISTRY)}.",
+            prompt,
             "You write hackathon project specs.",
             ProjectSpec,
             example=INTAKE_EXAMPLE,
@@ -151,4 +200,4 @@ async def generate_spec(problem: str) -> tuple[ProjectSpec, str]:
         return spec, "llm"
     except Exception as e:
         logger.warning("intake LLM failed, heuristic fallback: %s", e)
-        return heuristic_spec(problem), "heuristic"
+        return heuristic_spec(problem, criteria), "heuristic"
