@@ -39,6 +39,10 @@ class Settings:
             self.API_TIMEOUT = 30
         self.ML_ENABLED: bool = _get_bool("ML_ENABLED", False)
         self.VISION_ENABLED: bool = _get_bool("VISION_ENABLED", False)
+        try:
+            self.RATE_LIMIT_PER_MIN: int = int(os.getenv("RATE_LIMIT_PER_MIN", "600"))
+        except ValueError:
+            self.RATE_LIMIT_PER_MIN = 600
         self.AUTH_ENABLED: bool = _get_bool("AUTH_ENABLED", False)
         self.JWT_SECRET: str = os.getenv("JWT_SECRET", "")
         self.JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
