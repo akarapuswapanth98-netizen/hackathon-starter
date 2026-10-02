@@ -138,12 +138,12 @@ async def executor_node(state: dict) -> Dict[str, Any]:
         result = await call_tool(tool, args)
         tool_calls.append({"tool": tool, "args": args})
         tool_results.append({"tool": tool, "result": result[:1000]})
-        draft_bits = [state.get("draft", ""), f"[tool {tool}: {result[:400]}]"]
-        draft = "\n".join(b for b in draft_bits if b).strip()
+        # Do NOT set draft here: validator synthesizes the final answer from
+        # tool_results via LLM so the reply reads as an answer, not a tool echo.
         dur = (time.perf_counter() - t0) * 1000
         out = _record(state, "executor", f"{tool} {args}", result, tool, dur)
         out.update({"tool_calls": tool_calls, "tool_results": tool_results,
-                    "tool_output": result[:1000], "draft": draft, "executor_steps": n + 1})
+                    "tool_output": result[:1000], "executor_steps": n + 1})
         return out
 
     # Real LLM decides.
@@ -167,16 +167,15 @@ async def executor_node(state: dict) -> Dict[str, Any]:
     out = _record(state, "executor", f"{dec.tool}", result, dec.tool, dur)
     out.update({"tool_calls": tool_calls, "tool_results": tool_results,
                 "tool_output": result[:1000],
-                "draft": (state.get("draft", "") + f"\n[tool {dec.tool}: {result[:400]}]").strip(),
                 "executor_steps": n + 1})
     return out
 
 
 async def validator_node(state: dict) -> Dict[str, Any]:
     t0 = time.perf_counter()
-    draft = state.get("draft", "") or state.get("tool_output", "") or ""
-    # If no draft yet, generate one via reasoner LLM (mock-safe).
-    if not draft or len(draft.strip()) < 5:
+    draft = state.get("draft", "") or ""
+    # Generate the answer from plan + tool observations (never echo raw tool output).
+    if not draft or len(draft.strip()) < 5 or draft.strip().startswith("[tool "):
         llm = LLMService()
         prompt = (f"Problem: {state.get('input','')}\nContext: {state.get('context') or 'None'}\n"
                   f"Plan: {state.get('plan','')}\nTools: {state.get('tool_results', [])}\nRAG: {state.get('rag_context') or 'None'}")
