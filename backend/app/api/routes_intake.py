@@ -280,6 +280,8 @@ async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[P
             f"RULE: every must-have feature must directly solve the stated core problem. "
             f"Do NOT add a feature just to use a tool; it is fine to use none of the listed tools. "
             f"Note: RAG over uploaded documents plus an LLM answer can already explain or simplify documents.\n"
+            f"RULE: the kit has NO live data feeds. Features must say 'seeded <name> file' "
+            f"(e.g. 'seeded market_prices.txt') and must NEVER promise latest, live, or real-time data.\n"
             f"Tool capabilities (features may ONLY claim what these do; anything else needs seed data):\n{_tool_capabilities()}"
         )
         if crit:
