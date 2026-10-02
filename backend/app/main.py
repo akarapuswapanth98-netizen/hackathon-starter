@@ -13,6 +13,7 @@ from app.api.routes_health import router as health_router
 from app.api.routes_chat import router as chat_router
 from app.api.routes_solve import router as solve_router
 from app.api.routes_upload import router as upload_router
+from app.api.routes_intake import router as intake_router
 from app.auth.jwt import create_access_token, get_current_user, authenticate_user, \
     authorize, authorize_any, AuthUser
 
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router, prefix="/api", tags=["chat"])
     app.include_router(solve_router, prefix="/api", tags=["solve"])
     app.include_router(upload_router, prefix="/api", tags=["upload"])
+    app.include_router(intake_router, prefix="/api", tags=["intake"])
 
     @app.get("/")
     async def root():
