@@ -90,6 +90,10 @@ See `backend/app/agents/`: `state.py`, `tools.py` (decorator registry), `workflo
 
 Adding a tool: define a function + Pydantic args, decorate with `@register_tool`, under 10 lines. See `scripts/new_feature.md`.
 
+## Intake (problem -> spec)
+
+`POST /api/intake {"problem": "..."}` returns a `ProjectSpec` (title, user, 3 must-haves, demo flow, tools, risks) via `_llm_json`, heuristic fallback offline. Scaffold docs: `python backend/scripts/scaffold.py "..." [--force]` writes `docs/PROJECT_SPEC.md` + `docs/BUILD_PLAN.md` only.
+
 ## Boundaries
 
 - Run `pytest tests/ -q` + `npm run lint` before committing.
@@ -98,5 +102,5 @@ Adding a tool: define a function + Pydantic args, decorate with `@register_tool`
 
 ## Tests
 
-- Backend `python -m pytest -q`: 30 passed (24 in `backend/tests/` incl. agents/SSE/RAG/rate-limit + maps/ml). Mock offline.
+- Backend `python -m pytest -q`: 34 passed (28 in `backend/tests/` incl. agents/SSE/RAG/rate-limit/intake + maps/ml). Mock offline.
 - Frontend `npm run test`: 14 passed; `npm run build` + `npm run lint` pass.

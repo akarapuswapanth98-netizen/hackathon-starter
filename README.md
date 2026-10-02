@@ -81,7 +81,7 @@ Health: `http://localhost:8000/api/health` -> `{status:ok, llm_provider, rag_ena
 ```bash
 cd backend
 python -m pytest -q
-# 30 passed: 24 in tests/ (api, workflow, agents incl. SSE + RAG, rate-limit) + maps/ml; mock mode, offline
+# 34 passed: 28 in tests/ (api, workflow, agents incl. SSE + RAG, rate-limit, intake) + maps/ml; mock mode, offline
 
 cd frontend
 npm run test   # 14 passed (api, Home, ResponseArea)
@@ -195,11 +195,24 @@ Two-person: P1 Lead/AI-Backend (architecture, FastAPI, LLM, LangGraph, RAG, ML, 
 
 ## API Contract
 
-See `docs/api-contract.md`: `GET /api/health`, `POST /api/chat`, `POST /api/solve` (+ `steps` trace), `POST /api/solve/stream` (SSE), `POST /api/upload`. Central client `frontend/src/services/api.js`.
+See `docs/api-contract.md`: `GET /api/health`, `POST /api/chat`, `POST /api/solve` (+ `steps` trace), `POST /api/solve/stream` (SSE), `POST /api/upload`, `POST /api/intake` (problem -> ProjectSpec). Central client `frontend/src/services/api.js`.
+
+## Problem Intake (paste statement -> spec + plan)
+
+```bash
+# Endpoint (mock works offline, Groq when configured)
+curl -X POST http://localhost:8000/api/intake \
+  -H "Content-Type: application/json" \
+  -d '{"problem":"Patients in rural clinics cannot easily find specialists."}'
+
+# Scaffolder: writes docs/PROJECT_SPEC.md + docs/BUILD_PLAN.md (never app code)
+python backend/scripts/scaffold.py "Paste problem statement here"
+python backend/scripts/scaffold.py --file problem.txt [--force]
+```
 
 ## Tests & Build Results
 
-- Backend: `pytest -q 30 passed` (api, workflow, agents/tools/SSE/RAG, rate-limit, maps/ml; mock offline)
+- Backend: `pytest -q 34 passed` (api, workflow, agents/tools/SSE/RAG, rate-limit, intake, maps/ml; mock offline)
 - Frontend: `vitest 14 passed`, `vite build ✓ 37 modules`, `eslint pass`
 
 ## Still Need Manual Config

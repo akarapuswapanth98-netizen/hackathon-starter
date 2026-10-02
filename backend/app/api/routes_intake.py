@@ -142,6 +142,7 @@ async def generate_spec(problem: str) -> tuple[ProjectSpec, str]:
             "You write hackathon project specs.",
             ProjectSpec,
             example=INTAKE_EXAMPLE,
+            max_tokens=1200,
         )
         # Guardrail: suggested tools must exist in the kit.
         spec.suggested_tools = [t for t in spec.suggested_tools if t in TOOL_REGISTRY][:4]

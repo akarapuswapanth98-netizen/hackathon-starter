@@ -64,7 +64,7 @@ def _extract_json_object(text: str) -> str:
 
 
 async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[BaseModel],
-                   example: dict | None = None) -> BaseModel:
+                   example: dict | None = None, max_tokens: int = 400) -> BaseModel:
     """Call LLM in JSON mode, parse + strict key-check, one corrective retry.
 
     Transport-level retries are capped at 1 here: a Groq-side 400
@@ -84,7 +84,7 @@ async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[Base
         example = {k: ("<string>" if k != "steps" else ["<step>"]) for k in keys}
     ex = json.dumps(example)[:800]
     sys = system + f" Output ONLY a JSON object with exactly these keys: {keys}. Example: {ex}. Do NOT solve or answer the user's problem."
-    raw = await llm.generate(prompt, system=sys, temperature=0.0, max_tokens=400, json_mode=True)
+    raw = await llm.generate(prompt, system=sys, temperature=0.0, max_tokens=max_tokens, json_mode=True)
     text = _extract_json_object(raw.strip())
     for attempt in range(2):
         try:
@@ -97,7 +97,7 @@ async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[Base
             if attempt == 0:
                 raw2 = await llm.generate(
                     f"You returned: {text[:800]}\nRewrite it as a JSON object with EXACTLY these keys {keys}. Example: {ex}. No other text.",
-                    system="Output ONLY JSON.", temperature=0.0, max_tokens=400, json_mode=True,
+                    system="Output ONLY JSON.", temperature=0.0, max_tokens=max_tokens, json_mode=True,
                 )
                 text = _extract_json_object(raw2.strip())
     # Fallback: raise to let caller use deterministic default
