@@ -81,6 +81,41 @@ def _looks_truncated(raw: str, max_tokens: int) -> bool:
     return len(raw) >= max_tokens * 3 and _extract_json_object(raw) == raw and "{" in raw
 
 
+def _retry_after(e: Exception) -> str | None:
+    """Retry-After header value if the provider error carries a response, else None."""
+    try:
+        resp = getattr(e, "response", None)
+        headers = getattr(resp, "headers", None)
+        if headers is None:
+            return None
+        val = headers.get("retry-after") or headers.get("Retry-After")
+        return str(val) if val is not None else None
+    except Exception:
+        return None
+
+
+def _classify_provider_error(e: Exception) -> str:
+    """Map a provider exception to api_error[:status|:timeout]. Never includes bodies or keys."""
+    status = getattr(e, "status_code", None)
+    try:
+        status = int(status) if status is not None else None
+    except (TypeError, ValueError):
+        status = None
+    if status is not None:
+        return f"api_error:{status}"
+    name = type(e).__name__.lower()
+    if isinstance(e, TimeoutError) or "timeout" in name:
+        return "api_error:timeout"
+    return "api_error"
+
+
+def _provider_failure(reason_prefix: str, e: Exception) -> LLMJSONError:
+    ra = _retry_after(e)
+    if ra is not None:
+        logger.warning("provider call failed %s retry_after=%s", reason_prefix, ra)
+    return LLMJSONError(_classify_provider_error(e), f"provider call failed: {type(e).__name__}")
+
+
 async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[BaseModel],
                    example: dict | None = None, max_tokens: int = 400) -> BaseModel:
     """Call LLM in JSON mode, parse + strict key-check, one corrective retry.
@@ -105,7 +140,7 @@ async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[Base
     try:
         raw = await llm.generate(prompt, system=sys, temperature=0.0, max_tokens=max_tokens, json_mode=True)
     except Exception as e:
-        raise LLMJSONError("api_error", f"provider call failed: {type(e).__name__}") from e
+        raise _provider_failure("initial", e) from e
     text = _extract_json_object(raw.strip())
     last_err: Exception | None = None
     parsed: dict | None = None
@@ -130,7 +165,7 @@ async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[Base
                         system="Output ONLY JSON.", temperature=0.0, max_tokens=max_tokens, json_mode=True,
                     )
                 except Exception as e2:
-                    raise LLMJSONError("api_error", f"provider call failed: {type(e2).__name__}") from e2
+                    raise _provider_failure("corrective", e2) from e2
                 text = _extract_json_object(raw2.strip())
     # Both attempts failed: classify for the caller's fallback reporting.
     if _looks_truncated(raw, max_tokens):

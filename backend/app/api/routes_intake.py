@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from app.agents.nodes import _llm_json
 from app.agents.tools import TOOL_REGISTRY
 from app.ai.llm_service import LLMService
+from app.core.config import get_settings
 
 logger = logging.getLogger("hackathon.intake")
 router = APIRouter()
@@ -48,7 +49,7 @@ class IntakeResponse(BaseModel):
     success: bool = True
     spec: ProjectSpec
     fallback: str = "llm"  # llm | partial_repair | heuristic
-    fallback_reason: str = "none"  # none | truncated | bad_json | wrong_shape | api_error
+    fallback_reason: str = "none"  # none | truncated | bad_json | wrong_shape | api_error[:status|:timeout]
     total_duration_ms: float = 0.0
 
 
@@ -263,6 +264,25 @@ async def _try_repair(llm: LLMService, problem: str, partial: dict) -> Optional[
         return None
 
 
+async def _intake_llm_spec(llm: LLMService, problem: str, prompt: str) -> ProjectSpec:
+    """One full _llm_json attempt for a ProjectSpec, with tool guardrails applied."""
+    spec = await _llm_json(
+        llm,
+        prompt,
+        "You write hackathon project specs.",
+        ProjectSpec,
+        example=INTAKE_EXAMPLE,
+        max_tokens=2000,
+    )
+    # Guardrail: suggested tools must exist in the kit.
+    suggested = [t for t in spec.suggested_tools if t in TOOL_REGISTRY]
+    for t in _pick_tools(problem):
+        if t not in suggested:
+            suggested.append(t)
+    spec.suggested_tools = suggested[:4]
+    return spec
+
+
 async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[ProjectSpec, str, str]:
     """Shared spec builder used by the endpoint AND backend/scripts/scaffold.py.
 
@@ -286,22 +306,18 @@ async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[P
         )
         if crit:
             prompt += f"\nJudging criteria (judging_criteria_map keys MUST be exactly these):\n{crit[:2000]}"
-        spec = await _llm_json(
-            llm,
-            prompt,
-            "You write hackathon project specs.",
-            ProjectSpec,
-            example=INTAKE_EXAMPLE,
-            max_tokens=2000,
-        )
-        # Guardrail: suggested tools must exist in the kit; merge model picks with
-        # heuristic picks so actually-used tools (e.g. calculator) aren't dropped.
-        suggested = [t for t in spec.suggested_tools if t in TOOL_REGISTRY]
-        for t in _pick_tools(problem):
-            if t not in suggested:
-                suggested.append(t)
-        spec.suggested_tools = suggested[:4]
-        return spec, "llm", "none"
+        try:
+            spec = await _intake_llm_spec(llm, problem, prompt)
+            return spec, "llm", "none"
+        except LLMJSONError as e:
+            if e.reason != "api_error:429":
+                raise
+            fallback_model = get_settings().LLM_FALLBACK_MODEL.strip()
+            if not fallback_model:
+                raise
+            logger.warning("intake 429, retrying once on fallback model")
+            spec = await _intake_llm_spec(LLMService(model=fallback_model), problem, prompt)
+            return spec, "llm", "none"
     except LLMJSONError as e:
         partial = e.partial if isinstance(e.partial, dict) else None
         if e.reason == "wrong_shape" and partial is not None and _core_valid(partial):

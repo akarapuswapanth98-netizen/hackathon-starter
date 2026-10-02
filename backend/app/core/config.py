@@ -25,6 +25,9 @@ class Settings:
         self.GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
         self.GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
         self.ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+        # Optional fallback model retried ONCE on HTTP 429 only (per-model limits are
+        # separate on Groq, so a second model may succeed when the primary is capped).
+        self.LLM_FALLBACK_MODEL: str = os.getenv("LLM_FALLBACK_MODEL", "")
         self.RAG_ENABLED: bool = _get_bool("RAG_ENABLED", False) or _get_bool("ENABLE_RAG", False)
         self.RAG_PROVIDER: str = os.getenv("RAG_PROVIDER", "mock")
         self.DATABASE_URL: str = os.getenv("DATABASE_URL", "")
