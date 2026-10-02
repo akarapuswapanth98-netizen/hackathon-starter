@@ -53,8 +53,11 @@ _Checklist order for a 24-hour hackathon. File paths are where to edit in this k
 
 - [ ] **Setup (30 min):** copy `backend/.env.example` -> `backend/.env`, run `python scripts/preflight.py`, start backend (`cd backend && uvicorn app.main:app --port 8000`) + frontend (`cd frontend && npm install && npm run dev`)
 - [ ] **Feature 1 — {f1} (`frontend/src/pages/Home.jsx`, `backend/app/api/routes_solve.py`):** {f1d}
+  - [ ] Prepare seed data: {f1s}
 - [ ] **Feature 2 — {f2} (`backend/app/agents/tools.py` + one `elif` rule in `backend/app/agents/nodes.py`, see `scripts/new_feature.md`):** {f2d}
+  - [ ] Prepare seed data: {f2s}
 - [ ] **Feature 3 — {f3} (`backend/app/api/routes_upload.py` + `frontend/src/components/SourcePanel.jsx`):** {f3d}
+  - [ ] Prepare seed data: {f3s}
 - [ ] **Demo prep (45 min):** rehearse `docs/demo-plan.md` 3-min script, record backup video
 - [ ] **README (15 min):** update `README.md` problem section + `docs/api-contract.md` if endpoints changed
 - [ ] **Pitch (30 min):** fill `docs/presentation-outline.md` (10 slides), tailor to judging criteria above
@@ -91,8 +94,9 @@ def main() -> int:
         fh.write(render_spec_md(spec, fallback))
     with open(PLAN_PATH, "w", encoding="utf-8") as fh:
         fh.write(BUILD_PLAN_TEMPLATE.format(
-            title=spec.title, f1=f[0].name, f1d=f[0].description,
-            f2=f[1].name, f2d=f[1].description, f3=f[2].name, f3d=f[2].description))
+            title=spec.title, f1=f[0].name, f1d=f[0].description, f1s=f[0].data_needed,
+            f2=f[1].name, f2d=f[1].description, f2s=f[1].data_needed,
+            f3=f[2].name, f3d=f[2].description, f3s=f[2].data_needed))
     print(f"wrote {SPEC_PATH} + {PLAN_PATH} ({fallback} mode, reason={reason})")
     return 0
 
