@@ -60,7 +60,7 @@ class LLMService:
         if not self.configured:
             raise LLMNotConfiguredError(self.provider)
 
-    async def generate(self, prompt: str, system: Optional[str] = None, temperature: float = 0.7, max_tokens: int = 1000) -> str:
+    async def generate(self, prompt: str, system: Optional[str] = None, temperature: float = 0.7, max_tokens: int = 1000, json_mode: bool = False) -> str:
         if self.provider != "mock":
             self.ensure_configured()
         provider = self._get_provider()
@@ -70,7 +70,7 @@ class LLMService:
             start = time.perf_counter()
             try:
                 result = await asyncio.wait_for(
-                    provider.generate(prompt, system, temperature, max_tokens),
+                    provider.generate(prompt, system, temperature, max_tokens, json_mode=json_mode),
                     timeout=self.timeout,
                 )
                 latency_ms = (time.perf_counter() - start) * 1000

@@ -42,28 +42,57 @@ def _is_mock() -> bool:
         return True
 
 
+# Required top-level keys per schema: a reply that parses as JSON but lacks these
+# (e.g. a model answering the question instead of planning) counts as a parse failure.
+_REQUIRED_KEYS: dict[str, list[str]] = {
+    "PlanSchema": ["goal", "steps"],
+    "ExecutorDecision": ["tool", "done"],
+    "ValidationSchema": ["verdict"],
+}
+
+
+def _extract_json_object(text: str) -> str:
+    """Return the first balanced {...} JSON object in text (handles prose/code fences)."""
+    start = text.find("{")
+    while start != -1:
+        try:
+            _, end = json.JSONDecoder().raw_decode(text[start:])
+            return text[start:start + end]
+        except json.JSONDecodeError:
+            start = text.find("{", start + 1)
+    return text
+
+
 async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[BaseModel]) -> BaseModel:
-    """Call LLM, parse JSON, one safe retry on parse failure."""
-    raw = await llm.generate(prompt, system=system + " Return valid JSON only.", temperature=0.2, max_tokens=600)
-    text = raw.strip()
-    # Strip code fences if present.
-    if text.startswith("```"):
-        text = text.strip("`")
-        # remove leading 'json' marker
-        if text.lower().startswith("json"):
-            text = text[4:]
-    for _ in range(2):
+    """Call LLM in JSON mode, parse + strict key-check, one corrective retry.
+
+    Transport-level retries are capped at 1 here: a Groq-side 400
+    (json_validate_failed) is deterministic, not transient, so hammering
+    the same prompt wastes seconds. The corrective second attempt below
+    is the real retry.
+    """
+    llm.max_retries = 1
+    keys = _REQUIRED_KEYS.get(schema.__name__, [])
+    example = json.dumps({k: ("<string>" if k != "steps" else ["<step>"]) for k in keys})
+    sys = system + f" Output ONLY a JSON object with exactly these keys: {keys}. Example: {example}. Do NOT solve or answer the user's problem."
+    raw = await llm.generate(prompt, system=sys, temperature=0.0, max_tokens=400, json_mode=True)
+    text = _extract_json_object(raw.strip())
+    for attempt in range(2):
         try:
             data = json.loads(text)
-            return schema.model_validate(data)
-        except (json.JSONDecodeError, ValidationError):
-            raw2 = await llm.generate(
-                f"Fix this into valid JSON for schema {schema.__name__}:\n{text[:1500]}",
-                system="Return valid JSON only.", temperature=0.0, max_tokens=600,
-            )
-            text = raw2.strip()
+            if isinstance(data, dict) and all(k in data for k in keys):
+                return schema.model_validate(data)
+            raise ValueError(f"missing keys (need {keys})")
+        except (json.JSONDecodeError, ValidationError, ValueError) as e:
+            logger.warning("_llm_json attempt=%d schema=%s err=%s raw=%.120s", attempt, schema.__name__, e, text)
+            if attempt == 0:
+                raw2 = await llm.generate(
+                    f"You returned: {text[:800]}\nRewrite it as a JSON object with EXACTLY these keys {keys}. Example: {example}. No other text.",
+                    system="Output ONLY JSON.", temperature=0.0, max_tokens=400, json_mode=True,
+                )
+                text = _extract_json_object(raw2.strip())
     # Fallback: raise to let caller use deterministic default
-    raise ValueError(f"Could not parse JSON: {text[:300]}")
+    raise ValueError(f"Could not get valid {schema.__name__} JSON")
 
 
 def _record(state: dict, node: str, inp: str, out: str, tool_name: str = "", duration_ms: float = 0.0) -> dict:
@@ -107,6 +136,27 @@ async def planner_node(state: dict) -> Dict[str, Any]:
     return out
 
 
+def _rule_route(problem: str, rag_context: str, done_names: set[str]) -> tuple[str, dict] | None:
+    """Deterministic keyword routing. Used by mock mode AND as the real-LLM fallback
+    when the model won't return a valid routing decision (so tools still fire)."""
+    if any(c.isdigit() for c in problem) and "calculator" not in done_names:
+        import re
+        m = re.search(r"[\d][\d\s\+\-\*\/\(\)\.%]*[\d\)%]", problem)
+        expr = m.group(0).strip() if m else "2+2"
+        if len(expr) > 40:
+            expr = "2+2"
+        return "calculator", {"expression": expr}
+    if rag_context and "text_search" not in done_names:
+        return "text_search", {"query": problem[:100], "top_k": 3}
+    if "classify_urgency" in TOOL_REGISTRY and "classify_urgency" not in done_names and any(
+        k in problem.lower() for k in ("clinic", "patient", "urgency", "chest pain", "bleeding", "fever")
+    ):
+        return "classify_urgency", {"message": problem[:500]}
+    if "get_current_time" not in done_names and not done_names:
+        return "get_current_time", {}
+    return None
+
+
 async def executor_node(state: dict) -> Dict[str, Any]:
     t0 = time.perf_counter()
     n = int(state.get("executor_steps", 0))
@@ -114,60 +164,43 @@ async def executor_node(state: dict) -> Dict[str, Any]:
     tool_results = list(state.get("tool_results", []))
     rag_context = state.get("rag_context") or ""
     problem = state.get("input", "")
+    done_names = {c.get("tool") for c in tool_calls}
 
+    routed: tuple[str, dict] | None = None
     if _is_mock():
-        # Deterministic: calculator once if numbers, text_search once if RAG, else time once, then done.
-        done_names = {c.get("tool") for c in tool_calls}
-        if any(c.isdigit() for c in problem) and "calculator" not in done_names:
-            # Pull first simple expression from problem or default 2+2.
-            import re
-            m = re.search(r"[\d][\d\s\+\-\*\/\(\)\.]*[\d\)]", problem)
-            expr = m.group(0).strip() if m else "2+2"
-            if len(expr) > 40:
-                expr = "2+2"
-            tool, args = "calculator", {"expression": expr}
-        elif rag_context and "text_search" not in done_names:
-            tool, args = "text_search", {"query": problem[:100], "top_k": 3}
-        elif "get_current_time" not in done_names and not tool_calls:
-            tool, args = "get_current_time", {}
-        else:
-            dur = (time.perf_counter() - t0) * 1000
-            out = _record(state, "executor", "no more tools", "done", "", dur)
-            out["executor_steps"] = n
-            return out
-        result = await call_tool(tool, args)
-        tool_calls.append({"tool": tool, "args": args})
-        tool_results.append({"tool": tool, "result": result[:1000]})
-        # Do NOT set draft here: validator synthesizes the final answer from
-        # tool_results via LLM so the reply reads as an answer, not a tool echo.
-        dur = (time.perf_counter() - t0) * 1000
-        out = _record(state, "executor", f"{tool} {args}", result, tool, dur)
-        out.update({"tool_calls": tool_calls, "tool_results": tool_results,
-                    "tool_output": result[:1000], "executor_steps": n + 1})
-        return out
+        # Deterministic routing in mock mode.
+        routed = _rule_route(problem, rag_context, done_names)
+    else:
+        # Real LLM decides; rule-based fallback guarantees tools still fire on parse failure.
+        llm = LLMService()
+        prompt = (f"Problem: {problem}\nPlan: {state.get('plan','')}\n"
+                  f"Tools used: {tool_calls}\nObservations: {[r.get('result','')[:300] for r in tool_results]}\n"
+                  f"Tools:\n{tool_specs()}\n"
+                  f"Reply with a JSON object like {{\"tool\": \"calculator\", \"args\": {{\"expression\": \"2+2\"}}, \"done\": false, \"reason\": \"...\"}} "
+                  f"or {{\"tool\": \"\", \"args\": {{}}, \"done\": true, \"reason\": \"no more tools needed\"}}. Do NOT solve the problem.")
+        try:
+            dec = await _llm_json(llm, prompt, "You route tool calls.", ExecutorDecision)
+            if not dec.done and dec.tool and dec.tool in TOOL_REGISTRY:
+                routed = (dec.tool, dec.args or {})
+        except Exception as e:
+            logger.warning("executor routing parse failed, rule fallback: %s", e)
+            routed = _rule_route(problem, rag_context, done_names)
 
-    # Real LLM decides.
-    llm = LLMService()
-    prompt = (f"Problem: {problem}\nPlan: {state.get('plan','')}\n"
-              f"Tools used: {tool_calls}\nObservations: {[r.get('result','')[:300] for r in tool_results]}\n"
-              f"Tools:\n{tool_specs()}\nDecide next tool or done=true.")
-    try:
-        dec = await _llm_json(llm, prompt, "You route tool calls.", ExecutorDecision)
-    except Exception:
-        dec = ExecutorDecision(done=True, reason="parse-fallback")
-    if dec.done or not dec.tool or dec.tool not in TOOL_REGISTRY:
+    if routed is None:
         dur = (time.perf_counter() - t0) * 1000
-        out = _record(state, "executor", prompt, "done", "", dur)
+        out = _record(state, "executor", "no more tools", "done", "", dur)
         out["executor_steps"] = n
         return out
-    result = await call_tool(dec.tool, dec.args or {})
-    tool_calls.append({"tool": dec.tool, "args": dec.args or {}})
-    tool_results.append({"tool": dec.tool, "result": result[:1000]})
+    tool, args = routed
+    result = await call_tool(tool, args)
+    tool_calls.append({"tool": tool, "args": args})
+    tool_results.append({"tool": tool, "result": result[:1000]})
+    # Do NOT set draft here: validator synthesizes the final answer from
+    # tool_results via LLM so the reply reads as an answer, not a tool echo.
     dur = (time.perf_counter() - t0) * 1000
-    out = _record(state, "executor", f"{dec.tool}", result, dec.tool, dur)
+    out = _record(state, "executor", f"{tool} {args}", result, tool, dur)
     out.update({"tool_calls": tool_calls, "tool_results": tool_results,
-                "tool_output": result[:1000],
-                "executor_steps": n + 1})
+                "tool_output": result[:1000], "executor_steps": n + 1})
     return out
 
 
