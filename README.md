@@ -158,10 +158,19 @@ Clearly labeled. Mock provider (`LLM_PROVIDER=mock`) returns `[MOCK model] ... M
 ## 15. Troubleshooting
 
 - `LLM provider not configured` -> set `LLM_API_KEY` or provider-specific key in `backend/.env`
-- `RAG disabled` 400 -> set `RAG_ENABLED=true`
-- CORS error -> check `CORS_ORIGINS` includes frontend URL
+- `RAG disabled` 400 -> set `RAG_ENABLED=true` (then restart server — settings load at import)
+- CORS error -> check `CORS_ORIGINS` includes frontend URL (default covers `:5173`,`:3000`)
 - Timeout 30s -> backend `API_TIMEOUT`, frontend `api.js` TIMEOUT
 - `No module named 'app'` -> run from `backend/` or set `PYTHONPATH=backend`
+- Port in use (`8000`/`5173`) -> stop other app or `uvicorn app.main:app --port 8001` / `vite --port 5174`
+- Windows `npm.ps1 cannot be loaded` -> use `npm.cmd run dev` (execution policy blocks `.ps1`)
+- `Makefile` fails on Windows -> use `demo.ps1` / `npm.cmd` instead (Makefile targets assume bash)
+- Changed `.env` but nothing happened -> restart uvicorn (settings snapshot at import, no hot-reload for env)
+- SSE stalls behind proxy -> server sends `X-Accel-Buffering: no`; for LAN demo prefer direct `http://<host>:8000`, not a buffering proxy
+- Large PDF upload slow/fails -> keep uploads <5MB; only first 5 chunks ingested; needs `pypdf` (`pip install pypdf`) or you get `rag_error`
+- `429 Rate limited` -> many people share one IP; raise `RATE_LIMIT_PER_MIN` (default 600, `0` disables) and restart
+- First `/api/solve` slow -> LangGraph compiles on first call; run `python scripts/preflight.py` to warm up
+- Run preflight first: `python scripts/preflight.py` (or `powershell -File scripts/preflight.ps1`)
 
 ## 16. Hackathon Customization Guide
 

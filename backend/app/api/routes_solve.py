@@ -151,4 +151,7 @@ async def solve_stream(req: SolveRequest):
         total_ms = round((time.perf_counter() - t0) * 1000, 1)
         yield f"data: {json.dumps({'type': 'final', 'answer': state.get('final', ''), 'sources': sources, 'total_duration_ms': total_ms, 'trace': state.get('trace', [])})}\n\n"
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",  # disable proxy buffering for SSE
+    })
