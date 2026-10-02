@@ -265,6 +265,9 @@ async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[P
             f"Problem statement:\n{problem}\n\nScope: must be achievable in 24 hours. "
             f"Exactly 3 must-have features, each demoable live. "
             f"Each feature needs data_needed naming its seed/demo data.\n"
+            f"RULE: every must-have feature must directly solve the stated core problem. "
+            f"Do NOT add a feature just to use a tool; it is fine to use none of the listed tools. "
+            f"Note: RAG over uploaded documents plus an LLM answer can already explain or simplify documents.\n"
             f"Tool capabilities (features may ONLY claim what these do; anything else needs seed data):\n{_tool_capabilities()}"
         )
         if crit:
