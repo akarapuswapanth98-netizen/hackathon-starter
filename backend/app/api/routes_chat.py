@@ -21,6 +21,9 @@ async def chat(req: ChatRequest):
         rag = get_rag()
         qr = await rag.query(req.message, top_k=3)
         context = qr["context"]
+        # Strip obvious injection directives from retrieved text.
+        for b in ("ignore previous instructions", "ignore all instructions", "jailbreak"):
+            context = context.replace(b, "[removed]")
         sources = qr["sources"]
 
     prompt = req.message

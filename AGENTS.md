@@ -98,5 +98,5 @@ Adding a tool: define a function + Pydantic args, decorate with `@register_tool`
 
 ## Tests
 
-- Backend `backend/tests/test_api.py`, `test_workflow.py` + `test_maps.py`, `test_ml.py`.
-- Frontend Vitest `src/**/*.test.*`.
+- Backend `python -m pytest -q`: 28 passed (22 in `backend/tests/` incl. agents/SSE/RAG + maps/ml). Mock offline.
+- Frontend `npm run test`: 14 passed; `npm run build` + `npm run lint` pass.

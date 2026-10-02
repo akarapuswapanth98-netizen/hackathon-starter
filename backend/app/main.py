@@ -1,6 +1,9 @@
 """Hackathon Starter Backend - FastAPI application factory."""
 
 import logging
+import time
+import uuid
+from collections import defaultdict
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -69,14 +72,33 @@ def create_app() -> FastAPI:
     async def root():
         return {"message": "Hackathon Starter API running", "docs": "/docs", "health": "/api/health"}
 
-    # Timeout middleware (simple)
+    # Request-ID + structured log + simple rate limit (60/min/IP on solve/chat).
+    _hits: dict[str, list[float]] = defaultdict(list)
+
     @app.middleware("http")
-    async def timeout_middleware(request: Request, call_next):
+    async def request_middleware(request: Request, call_next):
+        req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
+        start = time.perf_counter()
+        # Rate limit only mutating agent endpoints.
+        if request.url.path in ("/api/solve", "/api/solve/stream", "/api/chat") and request.method == "POST":
+            ip = request.client.host if request.client else "unknown"
+            now = time.time()
+            window = [t for t in _hits[ip] if now - t < 60]
+            _hits[ip] = window
+            if len(window) >= 60:
+                return JSONResponse(status_code=429, content={"error": "Rate limited", "detail": "60 requests/min per IP"})
+            window.append(now)
         try:
-            return await call_next(request)
+            response = await call_next(request)
+            status_code = response.status_code
         except Exception as e:
             logger.exception(f"Middleware error: {e}")
             return JSONResponse(status_code=500, content={"error": "Internal error", "detail": str(e)})
+        latency_ms = round((time.perf_counter() - start) * 1000, 1)
+        response.headers["X-Request-ID"] = req_id
+        logger.info("req method=%s path=%s status=%s latency_ms=%s req_id=%s",
+                    request.method, request.url.path, status_code, latency_ms, req_id)
+        return response
 
     logger.info(f"App created env={s.APP_ENV} llm={s.LLM_PROVIDER}/{s.LLM_MODEL} rag={s.RAG_ENABLED} db={bool(s.DATABASE_URL)} mode={s.APP_MODE}")
     return app

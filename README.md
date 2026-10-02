@@ -4,16 +4,18 @@ Production-quality, lightweight starter that adapts in hours after problem revea
 
 ## 1. Project Overview
 
-- **Frontend**: React 18 + Vite 5 + `fetch` centralized client
-- **Backend**: Python 3.13 + FastAPI 0.115 + Pydantic 2
-- **AI**: Provider-agnostic LLMService (openai/groq/gemini/anthropic/mock), LangGraph optional agent workflow, LlamaIndex optional RAG
-- **Optional**: Supabase/Postgres, scikit-learn, HuggingFace, OpenCV - all disabled by default, app runs with `React + FastAPI + one LLM`.
+- **Frontend**: React 18.3 + Vite 5.4 + `fetch` centralized client (`frontend/src/services/api.js`)
+- **Backend**: Python 3.13 + FastAPI 0.141 + Pydantic 2.13 + Uvicorn 0.54
+- **AI**: Provider-agnostic LLMService (openai/groq/gemini/anthropic/mock, timeout 30s + 2 retries), LangGraph agent loop (planner -> executor/tools -> validator -> responder, max 5 steps), keyword RAG (honest, no vector DB)
+- **Optional**: Supabase/Postgres, scikit-learn, HuggingFace, OpenCV - all disabled by default, app runs with `React + FastAPI + mock LLM` offline.
 
 Preserves existing code - inspect before changing (see `docs/architecture.md`).
 
 ## 2. Architecture
 
-See `docs/architecture.md` (Mermaid diagram). Flow: `React -> api.js -> FastAPI /api/* -> Orchestrator (LLM/LangGraph/RAG/ML/Vision) -> Validator -> Response -> React`.
+See `docs/architecture.md` (Mermaid diagram). Flow: `React -> api.js -> FastAPI /api/* -> Agent (planner/executor+tools/validator/responder) or direct LLM -> Response -> React`.
+Endpoints: `GET /api/health`, `POST /api/chat`, `POST /api/solve` (returns `steps[]` trace + `total_duration_ms` + `token_estimate`), `POST /api/solve/stream` (SSE), `POST /api/upload`.
+Agent pattern + adding a tool: see `AGENTS.md` + `scripts/new_feature.md` + `backend/app/agents/tools.py`.
 
 ## 3. Installation
 
@@ -78,19 +80,20 @@ Health: `http://localhost:8000/api/health` -> `{status:ok, llm_provider, rag_ena
 
 ```bash
 cd backend
-python -m pytest tests/ -v
-# 16 tests: health, validation, workflow, failure handling
+python -m pytest -q
+# 28 passed: 22 in tests/ (api, workflow, agents incl. SSE + RAG) + maps/ml; mock mode, offline
 
 cd frontend
+npm run test   # 14 passed (api, Home, ResponseArea)
 npm run build  # verifies vite
-# frontend tests: vitest (if added)
+npm run lint
 ```
 
 All tests run without API keys (mock provider).
 
 ## 8. LLM Configuration
 
-Single abstraction: `backend/app/ai/llm_service.py` (also `app/services/llm_service.py` alias).
+Single abstraction: `backend/app/ai/llm_service.py` (timeout 30s, 2 retries, token estimates, mock offline).
 ```bash
 LLM_PROVIDER=groq
 LLM_MODEL=llama-3.3-70b-versatile
@@ -182,12 +185,12 @@ Two-person: P1 Lead/AI-Backend (architecture, FastAPI, LLM, LangGraph, RAG, ML, 
 
 ## API Contract
 
-See `docs/api-contract.md`: `GET /api/health`, `POST /api/chat`, `POST /api/solve`, `POST /api/upload`. Central client `frontend/src/services/api.js`.
+See `docs/api-contract.md`: `GET /api/health`, `POST /api/chat`, `POST /api/solve` (+ `steps` trace), `POST /api/solve/stream` (SSE), `POST /api/upload`. Central client `frontend/src/services/api.js`.
 
 ## Tests & Build Results
 
-- Backend: `pytest tests/ 16 passed` (health, validation, workflow, RAG disabled, upload)
-- Frontend: `vite build ✓ 36 modules, 152kB (gzip 49kB)`
+- Backend: `pytest -q 28 passed` (api, workflow, agents/tools/SSE/RAG, maps/ml; mock offline)
+- Frontend: `vitest 14 passed`, `vite build ✓ 37 modules`, `eslint pass`
 
 ## Still Need Manual Config
 

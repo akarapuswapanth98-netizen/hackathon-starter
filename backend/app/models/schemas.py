@@ -13,7 +13,7 @@ class HealthResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=10000, description="User message")
+    message: str = Field(..., min_length=1, max_length=8000, description="User message")
     conversation_id: Optional[str] = None
     use_rag: bool = False
     metadata: Optional[dict] = None
