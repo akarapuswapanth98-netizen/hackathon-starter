@@ -15,7 +15,7 @@ async def health():
         llm_provider=s.LLM_PROVIDER,
         llm_model=s.LLM_MODEL,
         rag_enabled=s.RAG_ENABLED,
-        db_enabled=s.SUPABASE_ENABLED,
+        db_enabled=bool(s.DATABASE_URL),
         llm_configured=configured
     )
 

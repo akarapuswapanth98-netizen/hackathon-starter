@@ -1,59 +1,80 @@
-<# 
-.SYNOPSIS
-    FoodBridge Demo Script - runs full demo sequence against local backend
-.DESCRIPTION
-    Starts uvicorn, runs match/reset/match sequence, prints formatted JSON
-.EXAMPLE
-    .\demo.ps1
-#>
+# Hackathon Starter - Demo Scripts
+# Windows PowerShell and Unix Shell scripts for common operations
 
-param(
-    [int]$Port = 8000,
-    [string]$BackendPath = "backend"
-)
+# ============================================================
+# demo.ps1 - Windows PowerShell demo script
+# ============================================================
 
-$base = "http://localhost:$Port/api/foodbridge"
-$health = "http://localhost:$Port/api/health"
+# This script runs a complete FoodBridge match cycle with demo reset
+# Usage: .\demo.ps1 from the repository root
 
-function Json($obj) { $obj | ConvertTo-Json -Depth 10 }
-function Curl($method, $url, $body = $null) {
-    $params = @{ Uri = $url; Method = $method; ContentType = "application/json" }
-    if ($body) { $params.Body = $body | ConvertTo-Json -Depth 10 }
-    try { (Invoke-RestMethod @params) | Json } catch { Write-Error $_.Exception.Message; exit 1 }
-}
+Write-Host "=== Hackathon Starter Demo ===" -ForegroundColor Cyan
+Write-Host ""
 
-Write-Host "=== Starting FoodBridge demo on port $Port ===" -ForegroundColor Cyan
+# Ensure we're in the right directory
+$rootDir = "C:\Users\akara\hackathon-starter"
+Set-Location $rootDir
 
-# Start server in background
-$server = Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "app.main:app", "--port", $Port, "--host", "127.0.0.1" -WorkingDirectory $BackendPath -PassThru -WindowStyle Hidden
-Write-Host "Server PID: $($server.Id)" -ForegroundColor Gray
-Start-Sleep -Seconds 4
+# Backend setup and start
+Write-Host "1. Starting backend server..." -ForegroundColor Yellow
+Write-Host "   cd backend && pip install -r requirements.txt" -NoNewline
+Write-Host ""
 
-try {
-    Write-Host "`n--- Health check ---" -ForegroundColor Green
-    Curl GET $health
+# Start backend in background
+$backendCmd = "& {
+    python -m venv venv
+    .\venv\Scripts\Activate.ps1
+    pip install -r requirements.txt
+    uvicorn app.main:app --port 8000 --host 0.0.0.0
+}"
 
-    Write-Host "`n--- Restaurants ---" -ForegroundColor Green
-    Curl GET "$base/restaurants"
+Write-Host "   Starting uvicorn server on port 8000..." -ForegroundColor Yellow
+$backendProcess = Start-Job -ScriptBlock $backendCmd
 
-    Write-Host "`n--- First match (consumes lot) ---" -ForegroundColor Green
-    Curl POST "$base/match" '{"surplus_id":"food-001"}'
+# Wait for server to start
+Start-Sleep -Seconds 5
 
-    Write-Host "`n--- Second match (409 - lot consumed) ---" -ForegroundColor Yellow
-    Curl POST "$base/match" '{"surplus_id":"food-001"}'
+# Test basic endpoints
+Write-Host ""
+Write-Host "2. Testing API endpoints..." -ForegroundColor Yellow
 
-    Write-Host "`n--- Demo reset ---" -ForegroundColor Cyan
-    Curl POST "$base/demo/reset"
+# Health check
+Write-Host "   GET /api/health" -NoNewline
+$health = Invoke-RestMethod -Uri "http://localhost:8000/api/health"
+Write-Host " - Status: $($health.status)" -ForegroundColor Green
 
-    Write-Host "`n--- Surplus after reset (available again) ---" -ForegroundColor Green
-    Curl GET "$base/surplus"
+# List restaurants
+Write-Host "   GET /api/foodbridge/restaurants" -NoNewline
+$rests = Invoke-RestMethod -Uri "http://localhost:8000/api/foodbridge/restaurants"
+Write-Host " - Found $($rests.restaurants.length) restaurant(s)" -ForegroundColor Green
 
-    Write-Host "`n--- Match again after reset ---" -ForegroundColor Green
-    Curl POST "$base/match" '{"surplus_id":"food-001"}'
+# List surplus (available by default)
+Write-Host "   GET /api/foodbridge/surplus" -NoNewline
+$surplus = Invoke-RestMethod -Uri "http://localhost:8000/api/foodbridge/surplus"
+Write-Host " - Found $($surplus.surplus.length) surplus lot(s)" -ForegroundColor Green
 
-    Write-Host "`n=== Demo complete ===" -ForegroundColor Cyan
-}
-finally {
-    Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-    Write-Host "Server stopped." -ForegroundColor Gray
-}
+# Run a match
+Write-Host "   POST /api/foodbridge/match" -NoNewline
+$match = Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/foodbridge/match" -Body @{surplus_id="food-001"} | ConvertFrom-Json
+Write-Host " - Success: $($match.success)" -ForegroundColor Green
+Write-Host "   Workflow ID: $($match.workflow_id)" -ForegroundColor Cyan
+Write-Host "   Total allocated: $($match.total_allocated) meals" -ForegroundColor Cyan
+
+# Demo reset
+Write-Host ""
+Write-Host "3. Running demo reset..." -ForegroundColor Yellow
+$reset = Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/foodbridge/demo/reset"
+Write-Host " - Success: $($reset.success) - $($reset.message)" -ForegroundColor Green
+
+# Run another match after reset
+Write-Host ""
+Write-Host "4. Running match after reset..." -ForegroundColor Yellow
+$match2 = Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/foodbridge/match" -Body @{surplus_id="food-001"} | ConvertFrom-Json
+Write-Host " - Success: $($match2.success)" -ForegroundColor Green
+Write-Host "   Total allocated: $($match2.total_allocated) meals" -ForegroundColor Cyan
+
+# Cleanup
+Write-Host ""
+Write-Host "5. Stopping backend..." -ForegroundColor Yellow
+Remove-Job $backendProcess -Force 2>$null
+Write-Host "   Done!" -ForegroundColor Cyan

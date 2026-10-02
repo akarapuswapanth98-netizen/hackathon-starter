@@ -1,5 +1,7 @@
+"""Hackathon Starter Backend - FastAPI application factory."""
+
 import logging
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import get_settings
@@ -8,13 +10,25 @@ from app.api.routes_health import router as health_router
 from app.api.routes_chat import router as chat_router
 from app.api.routes_solve import router as solve_router
 from app.api.routes_upload import router as upload_router
-from app.api.routes_foodbridge import router as foodbridge_router
+from app.auth.jwt import create_access_token, get_current_user, authenticate_user, \
+    authorize, authorize_any, AuthUser
 
-# Logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+# Import auth routes conditionally
+try:
+    from app.api.routes_auth import router as auth_router
+    AUTH_ROUTES_AVAILABLE = True
+except ImportError:
+    AUTH_ROUTES_AVAILABLE = False
+
 logger = logging.getLogger("hackathon")
 
+
 def create_app() -> FastAPI:
+    """Create and configure the FastAPI application.
+
+    Returns:
+        Configured FastAPI app instance.
+    """
     s = get_settings()
     app = FastAPI(
         title="Hackathon Starter API",
@@ -35,12 +49,18 @@ def create_app() -> FastAPI:
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)
 
+    # --- JWT Authentication (optional, env-driven) ---
+    auth_enabled = s.AUTH_ENABLED
+
+    if auth_enabled and AUTH_ROUTES_AVAILABLE:
+        # Auth routes
+        app.include_router(auth_router, prefix="/api", tags=["auth"])
+
     # Routes under /api
     app.include_router(health_router, prefix="/api", tags=["health"])
     app.include_router(chat_router, prefix="/api", tags=["chat"])
     app.include_router(solve_router, prefix="/api", tags=["solve"])
     app.include_router(upload_router, prefix="/api", tags=["upload"])
-    app.include_router(foodbridge_router, prefix="/api", tags=["foodbridge"])
 
     @app.get("/")
     async def root():
@@ -55,8 +75,9 @@ def create_app() -> FastAPI:
             logger.exception(f"Middleware error: {e}")
             return JSONResponse(status_code=500, content={"error": "Internal error", "detail": str(e)})
 
-    logger.info(f"App created env={s.APP_ENV} llm={s.LLM_PROVIDER}/{s.LLM_MODEL} rag={s.RAG_ENABLED} db={s.SUPABASE_ENABLED}")
+    logger.info(f"App created env={s.APP_ENV} llm={s.LLM_PROVIDER}/{s.LLM_MODEL} rag={s.RAG_ENABLED} db={bool(s.DATABASE_URL)} mode={s.APP_MODE}")
     return app
+
 
 app = create_app()
 

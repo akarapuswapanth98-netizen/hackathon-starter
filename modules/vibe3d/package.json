@@ -1,0 +1,46 @@
+{
+  "name": "@hackathon/vibe3d",
+  "version": "0.1.0",
+  "description": "Hackathon Toolkit V2 - Frontend generation and visualization module",
+  "type": "module",
+  "main": "cli/index.js",
+  "scripts": {
+    "generate": "node cli/index.js generate",
+    "scrape": "node cli/index.js scrape",
+    "analyze": "node cli/index.js analyze",
+    "templates": "node cli/index.js templates",
+    "preview": "node cli/index.js preview",
+    "init": "node cli/index.js init",
+    "version": "node cli/index.js version"
+  },
+  "dependencies": {
+    "commander": "^11.0.0",
+    "yaml": "^2.4.1",
+    "axios": "^1.7.2",
+    "three": "^0.165.0",
+    "@types/three": "^0.165.0",
+    "gsap": "^3.12.4"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "typescript": "^5.5.0"
+  },
+  "keywords": [
+    "hackathon",
+    "vibe3d",
+    "frontend",
+    "generation",
+    "openapi",
+    "foodbridge"
+  ],
+  "author": "Hackathon Toolkit V2",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hackathon-toolkit/vibe3d"
+  },
+  "cli": {
+    "command": "vibe3d",
+    "description": "Hackathon Toolkit V2 Vibe3D frontend generation and visualization"
+  }
+}

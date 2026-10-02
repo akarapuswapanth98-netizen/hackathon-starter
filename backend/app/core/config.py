@@ -29,11 +29,19 @@ class Settings:
     RAG_ENABLED: bool = _get_bool("RAG_ENABLED", False) or _get_bool("ENABLE_RAG", False)
     RAG_PROVIDER: str = os.getenv("RAG_PROVIDER", "mock")
 
-    # DB - disabled by default
-    SUPABASE_ENABLED: bool = _get_bool("SUPABASE_ENABLED", False) or _get_bool("ENABLE_DB", False)
-    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    # Database - SQLite default, PostgreSQL-ready
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+    # Auto-create SQLite data directory
+    DATABASE_AUTO_CREATE: bool = _get_bool("DATABASE_AUTO_CREATE", True)
+
+    # Storage provider: memory | sqlalchemy
+    STORAGE_PROVIDER: str = os.getenv("STORAGE_PROVIDER", "memory").lower()
+
+    # Mode: LIVE | DEMO | AUTO
+    # LIVE: real LLM, real DB, full features
+    # DEMO: deterministic, in-memory, no tokens, demo reset
+    # AUTO: detect from LLM_API_KEY and DATABASE_URL
+    APP_MODE: str = os.getenv("APP_MODE", "AUTO").upper()
 
     # App
     APP_ENV: str = os.getenv("APP_ENV", "development")
@@ -52,6 +60,21 @@ class Settings:
     MATCH_MAX_RETRIES: int = int(os.getenv("MATCH_MAX_RETRIES", "1"))
     # auto | true | false - "auto" = demo mode when no real LLM API key is configured
     FOODBRIDGE_DEMO_MODE: str = os.getenv("FOODBRIDGE_DEMO_MODE", "auto").strip().lower()
+
+    # Optional features
+    RAG_ENABLED: bool = _get_bool("RAG_ENABLED", False) or _get_bool("ENABLE_RAG", False)
+    RAG_PROVIDER: str = os.getenv("RAG_PROVIDER", "mock")
+    ML_ENABLED: bool = _get_bool("ML_ENABLED", False)
+    VISION_ENABLED: bool = _get_bool("VISION_ENABLED", False)
+
+    # Auth (optional)
+    AUTH_ENABLED: bool = _get_bool("AUTH_ENABLED", False)
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "30"))
+
+    # Maps provider: haversine | osrm | google | mapbox
+    MAPS_PROVIDER: str = os.getenv("MAPS_PROVIDER", "haversine").lower()
 
     def matching_weights(self) -> dict[str, float]:
         """Configured scoring weights (raw; normalize at use site)."""
@@ -73,6 +96,42 @@ class Settings:
             return False
         # auto: real provider + api key available -> real LLM, otherwise demo
         return not (self.LLM_PROVIDER != "mock" and bool(self.LLM_API_KEY))
+
+    def is_live_mode(self) -> bool:
+        """Check if running in LIVE mode."""
+        if self.APP_MODE == "LIVE":
+            return True
+        if self.APP_MODE == "DEMO":
+            return False
+        # AUTO: live if real LLM key and DATABASE_URL set
+        has_real_llm = self.LLM_PROVIDER != "mock" and bool(self.LLM_API_KEY)
+        has_db = bool(self.DATABASE_URL)
+        return has_real_llm and has_db
+
+    def is_demo_mode(self) -> bool:
+        """Check if running in DEMO mode."""
+        if self.APP_MODE == "DEMO":
+            return True
+        if self.APP_MODE == "LIVE":
+            return False
+        # AUTO: demo if no real LLM key or no DB
+        return not self.is_live_mode()
+
+    def get_database_url(self) -> str:
+        """Get effective database URL with SQLite fallback."""
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
+        # Default to SQLite in ./data
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        return f"sqlite:///{os.path.join(data_dir, 'hackathon.db')}"
+
+    def get_storage_provider(self) -> str:
+        """Get effective storage provider."""
+        if self.STORAGE_PROVIDER in ("memory", "sqlalchemy"):
+            return self.STORAGE_PROVIDER
+        # Auto: sqlalchemy in LIVE, memory in DEMO
+        return "sqlalchemy" if self.is_live_mode() else "memory"
 
 
 @lru_cache

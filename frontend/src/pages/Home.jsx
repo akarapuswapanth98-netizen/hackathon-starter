@@ -123,6 +123,7 @@ export default function Home() {
               <div className="small" style={{ marginTop: '4px' }}>React + FastAPI + LangGraph (optional) + RAG (optional) · API: <code>POST /api/solve</code> · Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to solve</div>
             </div>
             <div className="flex gap-2">
+              <a href="#/foodbridge" className="btn btn-secondary" style={{ padding: '8px 14px', textDecoration: 'none' }}>🍲 FoodBridge 3D Demo</a>
               <select value={sampleIdx} onChange={e=>applySample(Number(e.target.value))} className="input" style={{ width: '220px', padding: '8px' }}>
                 {SAMPLES.map((s,i)=><option key={i} value={i}>{s.label}</option>)}
               </select>

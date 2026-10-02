@@ -47,4 +47,29 @@ describe('api client - central contract', () => {
     fetch.mockResolvedValue({ ok: false, text: async () => JSON.stringify({ detail: 'RAG disabled' }) })
     await expect(api.chat({ message: 'hi', use_rag: true })).rejects.toThrow('RAG disabled')
   })
+
+  it('parses 409 object error into readable message + structured code', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: async () => JSON.stringify({ success: false, error: { code: 'SURPLUS_ALREADY_ALLOCATED', message: 'Surplus lot food-001 has already been allocated', surplus_id: 'food-001' } }),
+    })
+    const err = await api.foodbridgeMatch({ surplus_id: 'food-001' }).catch((e) => e)
+    expect(err.message).toContain('has already been allocated')
+    expect(err.message).toContain('food-001')
+    expect(err.message).not.toContain('[object Object]')
+    expect(err.status).toBe(409)
+    expect(err.code).toBe('SURPLUS_ALREADY_ALLOCATED')
+  })
+
+  it('parses FastAPI 422 array detail into readable message', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => JSON.stringify({ detail: [{ type: 'greater_than', loc: ['body', 'requested_radius_km'], msg: 'Input should be greater than 0' }] }),
+    })
+    const err = await api.foodbridgeMatch({ requested_radius_km: -5 }).catch((e) => e)
+    expect(err.message).toContain('requested_radius_km')
+    expect(err.status).toBe(422)
+  })
 })
