@@ -64,10 +64,15 @@ def _extract_json_object(text: str) -> str:
 
 
 class LLMJSONError(ValueError):
-    """Structured JSON failure with a machine-readable reason (never includes secrets)."""
+    """Structured JSON failure with a machine-readable reason (never includes secrets).
 
-    def __init__(self, reason: str, detail: str = ""):
+    `partial` carries the last successfully parsed dict (if any) so callers can
+    repair salvageable replies instead of discarding them.
+    """
+
+    def __init__(self, reason: str, detail: str = "", partial: dict | None = None):
         self.reason = reason
+        self.partial = partial
         super().__init__(detail or reason)
 
 
@@ -103,9 +108,12 @@ async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[Base
         raise LLMJSONError("api_error", f"provider call failed: {type(e).__name__}") from e
     text = _extract_json_object(raw.strip())
     last_err: Exception | None = None
+    parsed: dict | None = None
     for attempt in range(2):
         try:
             data = json.loads(text)
+            if isinstance(data, dict):
+                parsed = data
             if isinstance(data, dict) and all(k in data for k in keys):
                 return schema.model_validate(data)
             raise ValueError(f"missing keys (need {keys})")
@@ -126,10 +134,10 @@ async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[Base
                 text = _extract_json_object(raw2.strip())
     # Both attempts failed: classify for the caller's fallback reporting.
     if _looks_truncated(raw, max_tokens):
-        raise LLMJSONError("truncated", f"reply looked cut off at ~{max_tokens} tokens")
+        raise LLMJSONError("truncated", f"reply looked cut off at ~{max_tokens} tokens", partial=parsed)
     if isinstance(last_err, json.JSONDecodeError):
-        raise LLMJSONError("bad_json", "no parseable JSON object in reply")
-    raise LLMJSONError("wrong_shape", str(last_err)[:200] if last_err else "schema validation failed")
+        raise LLMJSONError("bad_json", "no parseable JSON object in reply", partial=parsed)
+    raise LLMJSONError("wrong_shape", str(last_err)[:200] if last_err else "schema validation failed", partial=parsed)
 
 
 def _record(state: dict, node: str, inp: str, out: str, tool_name: str = "", duration_ms: float = 0.0) -> dict:

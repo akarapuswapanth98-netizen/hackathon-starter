@@ -47,7 +47,7 @@ class IntakeRequest(BaseModel):
 class IntakeResponse(BaseModel):
     success: bool = True
     spec: ProjectSpec
-    fallback: str = "llm"  # llm | heuristic
+    fallback: str = "llm"  # llm | partial_repair | heuristic
     fallback_reason: str = "none"  # none | truncated | bad_json | wrong_shape | api_error
     total_duration_ms: float = 0.0
 
@@ -175,6 +175,82 @@ async def intake(req: IntakeRequest):
                           fallback_reason=reason, total_duration_ms=total_ms)
 
 
+class RepairSchema(BaseModel):
+    """Gap-fill reply: only the fields the first call left empty."""
+
+    stretch_goals: list[str] = Field(..., min_length=2, max_length=3)
+    judging_criteria_map: dict[str, str] = Field(..., min_length=3)
+    risks: list[str] = Field(..., min_length=2, max_length=3)
+
+
+REPAIR_DEFAULTS = {
+    "stretch_goals": ["Local-language input", "Voice input"],
+    "judging_criteria_map": {
+        "Innovation": "Agent loop with tools, traceable steps",
+        "Execution": "Working mock-mode demo, no stubs",
+        "Demo": "3-minute solve -> upload -> RAG answer flow",
+    },
+    "risks": [
+        "Keep inputs under 8000 chars or the API rejects them",
+        "Real-LLM calls take 6-30s — keep demo queries short",
+        "Free-tier rate limits apply at shared-IP events",
+    ],
+}
+
+_REPAIRABLE = ("stretch_goals", "judging_criteria_map", "risks")
+
+
+def _core_valid(partial: dict) -> bool:
+    """Core fields usable? Only then is a repair (not full heuristic) allowed."""
+    try:
+        if not str(partial.get("title", "")).strip():
+            return False
+        feats = partial.get("must_have_features")
+        if not isinstance(feats, list) or len(feats) != 3:
+            return False
+        for f in feats:
+            if not isinstance(f, dict) or not str(f.get("name", "")).strip() \
+                    or not str(f.get("description", "")).strip() \
+                    or not str(f.get("data_needed", "")).strip():
+                return False
+        flow = partial.get("demo_flow")
+        if not isinstance(flow, list) or not (4 <= len(flow) <= 6) \
+                or not all(str(s).strip() for s in flow):
+            return False
+        if not str(partial.get("target_user", "")).strip() or not str(partial.get("core_problem", "")).strip():
+            return False
+        return True
+    except Exception:
+        return False
+
+
+async def _try_repair(llm: LLMService, problem: str, partial: dict) -> Optional[ProjectSpec]:
+    """Fill ONLY the missing repairable fields via one small LLM call.
+
+    Returns a validated ProjectSpec, or None if the repair call also fails
+    (caller then uses deterministic defaults).
+    """
+    missing = [k for k in _REPAIRABLE if not partial.get(k)]
+    logger.warning("intake partial repair, missing=%s", missing)
+    try:
+        gap = await _llm_json(
+            llm,
+            f"Existing spec draft:\n{str(partial)[:1500]}\n\nProblem: {problem[:300]}\n\n"
+            f"Provide ONLY these missing fields: {missing}. Keep them consistent with the draft above.",
+            "You fill gaps in hackathon project specs.",
+            RepairSchema,
+            example={k: REPAIR_DEFAULTS[k] for k in missing},
+            max_tokens=600,
+        )
+        merged = dict(partial)
+        for k in missing:
+            merged[k] = getattr(gap, k)
+        return ProjectSpec.model_validate(merged)
+    except Exception as e:
+        logger.warning("intake repair call failed (%s), using defaults", type(e).__name__)
+        return None
+
+
 async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[ProjectSpec, str, str]:
     """Shared spec builder used by the endpoint AND backend/scripts/scaffold.py.
 
@@ -183,8 +259,8 @@ async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[P
     """
     from app.agents.nodes import LLMJSONError
     crit = (criteria or "").strip()
+    llm = LLMService()
     try:
-        llm = LLMService()
         prompt = (
             f"Problem statement:\n{problem}\n\nScope: must be achievable in 24 hours. "
             f"Exactly 3 must-have features, each demoable live. "
@@ -210,6 +286,16 @@ async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[P
         spec.suggested_tools = suggested[:4]
         return spec, "llm", "none"
     except LLMJSONError as e:
+        partial = e.partial if isinstance(e.partial, dict) else None
+        if e.reason == "wrong_shape" and partial is not None and _core_valid(partial):
+            repaired = await _try_repair(llm, problem, partial)
+            if repaired is not None:
+                return repaired, "partial_repair", e.reason
+            merged = dict(partial)
+            for k in _REPAIRABLE:
+                if not merged.get(k):
+                    merged[k] = REPAIR_DEFAULTS[k]
+            return ProjectSpec.model_validate(merged), "partial_repair", e.reason
         logger.warning("intake LLM failed (%s), heuristic fallback", e.reason)
         return heuristic_spec(problem, criteria), "heuristic", e.reason
     except Exception as e:
