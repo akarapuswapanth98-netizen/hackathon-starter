@@ -126,6 +126,13 @@ async def intake(req: IntakeRequest):
         raise HTTPException(status_code=422, detail="problem too long (max 8000 chars)")
 
     t0 = time.perf_counter()
+    spec, fallback = await generate_spec(problem)
+    total_ms = round((time.perf_counter() - t0) * 1000, 1)
+    return IntakeResponse(success=True, spec=spec, fallback=fallback, total_duration_ms=total_ms)
+
+
+async def generate_spec(problem: str) -> tuple[ProjectSpec, str]:
+    """Shared spec builder used by the endpoint AND backend/scripts/scaffold.py."""
     try:
         llm = LLMService()
         spec = await _llm_json(
@@ -140,10 +147,7 @@ async def intake(req: IntakeRequest):
         spec.suggested_tools = [t for t in spec.suggested_tools if t in TOOL_REGISTRY][:4]
         if not spec.suggested_tools:
             spec.suggested_tools = _pick_tools(problem)
-        fallback = "llm"
+        return spec, "llm"
     except Exception as e:
         logger.warning("intake LLM failed, heuristic fallback: %s", e)
-        spec = heuristic_spec(problem)
-        fallback = "heuristic"
-    total_ms = round((time.perf_counter() - t0) * 1000, 1)
-    return IntakeResponse(success=True, spec=spec, fallback=fallback, total_duration_ms=total_ms)
+        return heuristic_spec(problem), "heuristic"
