@@ -31,11 +31,11 @@ class ProjectSpec(BaseModel):
     target_user: str = Field(..., min_length=1, max_length=200)
     core_problem: str = Field(..., min_length=1, max_length=1000)
     must_have_features: list[Feature] = Field(..., min_length=3, max_length=3)
-    stretch_goals: list[str] = Field(default_factory=list, max_length=3)
+    stretch_goals: list[str] = Field(default_factory=list, min_length=2, max_length=3)
     demo_flow: list[str] = Field(..., min_length=4, max_length=6)
-    judging_criteria_map: dict[str, str] = Field(default_factory=dict)
+    judging_criteria_map: dict[str, str] = Field(default_factory=dict, min_length=3)
     suggested_tools: list[str] = Field(default_factory=list)
-    risks: list[str] = Field(default_factory=list, max_length=3)
+    risks: list[str] = Field(default_factory=list, min_length=2, max_length=3)
 
 
 class IntakeRequest(BaseModel):

@@ -95,8 +95,10 @@ async def _llm_json(llm: LLMService, prompt: str, system: str, schema: type[Base
         except (json.JSONDecodeError, ValidationError, ValueError) as e:
             logger.warning("_llm_json attempt=%d schema=%s err=%s raw=%.120s", attempt, schema.__name__, e, text)
             if attempt == 0:
+                # Corrective note names the exact failure (e.g. empty list where 2-3 items required).
                 raw2 = await llm.generate(
-                    f"You returned: {text[:800]}\nRewrite it as a JSON object with EXACTLY these keys {keys}. Example: {ex}. No other text.",
+                    f"You returned: {text[:800]}\nProblem with it: {str(e)[:300]}\n"
+                    f"Rewrite it as a JSON object with EXACTLY these keys {keys} (all required lists/dicts must be non-empty per the schema). Example: {ex}. No other text.",
                     system="Output ONLY JSON.", temperature=0.0, max_tokens=max_tokens, json_mode=True,
                 )
                 text = _extract_json_object(raw2.strip())
