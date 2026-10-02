@@ -31,11 +31,11 @@ class ProjectSpec(BaseModel):
     target_user: str = Field(..., min_length=1, max_length=200)
     core_problem: str = Field(..., min_length=1, max_length=1000)
     must_have_features: list[Feature] = Field(..., min_length=3, max_length=3)
-    stretch_goals: list[str] = Field(default_factory=list, min_length=2, max_length=3)
+    stretch_goals: list[str] = Field(..., min_length=2, max_length=3)
     demo_flow: list[str] = Field(..., min_length=4, max_length=6)
-    judging_criteria_map: dict[str, str] = Field(default_factory=dict, min_length=3)
+    judging_criteria_map: dict[str, str] = Field(..., min_length=3)
     suggested_tools: list[str] = Field(default_factory=list)
-    risks: list[str] = Field(default_factory=list, min_length=2, max_length=3)
+    risks: list[str] = Field(..., min_length=2, max_length=3)
 
 
 class IntakeRequest(BaseModel):
@@ -201,10 +201,13 @@ async def generate_spec(problem: str, criteria: Optional[str] = None) -> tuple[P
             example=INTAKE_EXAMPLE,
             max_tokens=2000,
         )
-        # Guardrail: suggested tools must exist in the kit.
-        spec.suggested_tools = [t for t in spec.suggested_tools if t in TOOL_REGISTRY][:4]
-        if not spec.suggested_tools:
-            spec.suggested_tools = _pick_tools(problem)
+        # Guardrail: suggested tools must exist in the kit; merge model picks with
+        # heuristic picks so actually-used tools (e.g. calculator) aren't dropped.
+        suggested = [t for t in spec.suggested_tools if t in TOOL_REGISTRY]
+        for t in _pick_tools(problem):
+            if t not in suggested:
+                suggested.append(t)
+        spec.suggested_tools = suggested[:4]
         return spec, "llm", "none"
     except LLMJSONError as e:
         logger.warning("intake LLM failed (%s), heuristic fallback", e.reason)
