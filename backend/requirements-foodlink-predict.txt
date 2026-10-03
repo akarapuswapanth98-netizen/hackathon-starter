@@ -1,0 +1,14 @@
+# FoodLink Predict - optional ML dependencies.
+#
+# NOT installed by default. The core requirements.txt is unchanged, so a fresh
+# clone of the starter behaves exactly as before and the app still boots.
+#
+# Without these, every forecast series falls back to the cold-start shrinkage
+# path and each row is labelled method="cold_start" - degraded but functional,
+# never silently wrong.
+#
+#   pip install -r requirements-foodlink-predict.txt
+#
+# scikit-learn is the only hard requirement: it provides both the quantile
+# gradient-boosting model (default) and the random-forest alternative.
+scikit-learn>=1.0

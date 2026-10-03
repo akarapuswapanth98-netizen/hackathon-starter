@@ -55,6 +55,43 @@ class Settings:
             self.JWT_EXPIRE_MINUTES = 30
         self.MAPS_PROVIDER: str = os.getenv("MAPS_PROVIDER", "haversine").lower()
 
+        # --- FoodLink Predict (project module; additive, defaults = safe/offline) ---
+        # See app/projects/foodlink_predict/config.py for the typed accessors.
+        self.FOODLINK_PREDICT_ENABLED: bool = _get_bool("FOODLINK_PREDICT_ENABLED", True)
+        self.DEMO_MODE: bool = _get_bool("DEMO_MODE", True)
+        self.ML_PROVIDER: str = os.getenv("ML_PROVIDER", "sklearn").lower()
+        self.FORECAST_MODEL: str = os.getenv("FORECAST_MODEL", "gradient_boosting").lower()
+        # FLP owns its own SQLite file by default so it never disturbs DATABASE_URL.
+        self.FOODLINK_PREDICT_DB_URL: str = os.getenv("FOODLINK_PREDICT_DB_URL", "")
+        # FoodLink adapter: "demo" (offline, clearly labelled) | "http" (needs contract)
+        self.FOODLINK_ADAPTER_MODE: str = os.getenv("FOODLINK_ADAPTER_MODE", "demo").lower()
+        self.FOODLINK_API_URL: str = os.getenv("FOODLINK_API_URL", "")
+        # Path on FoodLink that accepts a surplus listing. Left empty on purpose:
+        # the real FoodLink listing schema is UNVERIFIED, so we refuse to guess it.
+        self.FOODLINK_LISTING_PATH: str = os.getenv("FOODLINK_LISTING_PATH", "")
+        # kg CO2e avoided per kg of food diverted from landfill (WRAP/EPA-style default).
+        try:
+            self.EMISSION_FACTOR_CO2E: float = float(os.getenv("EMISSION_FACTOR_CO2E", "2.5"))
+        except ValueError:
+            self.EMISSION_FACTOR_CO2E = 2.5
+        # Grams of food per meal-equivalent, for the impact ledger.
+        try:
+            self.KG_PER_MEAL: float = float(os.getenv("KG_PER_MEAL", "0.35"))
+        except ValueError:
+            self.KG_PER_MEAL = 0.35
+        # Hours FoodLink needs to collect a confirmed listing.
+        try:
+            self.PICKUP_LEAD_TIME_HOURS: float = float(os.getenv("PICKUP_LEAD_TIME_HOURS", "6"))
+        except ValueError:
+            self.PICKUP_LEAD_TIME_HOURS = 6.0
+        # JSON override for safe holding windows, e.g. {"cooked":24,"produce":72}
+        self.SAFE_WINDOWS_JSON: str = os.getenv("SAFE_WINDOWS_JSON", "")
+        # Minimum days of history before the ML model is trusted (below = cold start).
+        try:
+            self.FORECAST_COLD_START_DAYS: int = int(os.getenv("FORECAST_COLD_START_DAYS", "14"))
+        except ValueError:
+            self.FORECAST_COLD_START_DAYS = 14
+
     def is_live_mode(self) -> bool:
         """Check if running in LIVE mode."""
         if self.APP_MODE == "LIVE":

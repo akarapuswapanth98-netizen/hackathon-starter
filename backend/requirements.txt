@@ -50,3 +50,8 @@ langchain-core==1.6.5
 # HuggingFace (generic)
 # transformers==4.45.0
 # torch -- install per CUDA version
+
+# FoodLink Predict (optional, additive - NOT installed by default):
+#   pip install -r requirements-foodlink-predict.txt
+# Without it, forecasting falls back to the labelled cold-start path.
+# See backend/requirements-foodlink-predict.txt

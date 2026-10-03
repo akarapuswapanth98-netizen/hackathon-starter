@@ -70,6 +70,15 @@ def create_app() -> FastAPI:
     app.include_router(upload_router, prefix="/api", tags=["upload"])
     app.include_router(intake_router, prefix="/api", tags=["intake"])
 
+    # FoodLink Predict (project module). Additive: guarded + feature-flagged so the
+    # starter behaves exactly as before when disabled or when the module is absent.
+    if get_settings().FOODLINK_PREDICT_ENABLED:
+        try:
+            from app.projects.foodlink_predict.routes import router as flp_router
+            app.include_router(flp_router, prefix="/api", tags=["foodlink-predict"])
+        except ImportError:  # module intentionally absent -> starter unchanged
+            logger.warning("FOODLINK_PREDICT_ENABLED=true but app.projects.foodlink_predict not found; skipping")
+
     @app.get("/")
     async def root():
         return {"message": "Hackathon Starter API running", "docs": "/docs", "health": "/api/health"}
