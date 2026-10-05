@@ -18,7 +18,7 @@ dependencies = [
     "langchain-core==1.6.5",
     "python-multipart==0.0.32",
     "sqlalchemy==2.0.32",
-    "alembic==1.13.1",
+    "alembic==1.20.0",
     "python-jose[cryptography]==3.5.0",
     "openai==3.3.1",
     "groq==1.7.0",
