@@ -23,7 +23,7 @@ groq==1.7.0  # needed for LLM_PROVIDER=groq (native client)
 # google-generativeai==0.8.0  # uncomment if using Gemini
 # anthropic==0.40.0  # uncomment if using Anthropic
 langgraph==1.2.12
-langchain-core==1.6.5
+langchain-core==1.6.6
 
 # Optional groups - install when needed
 # RAG:
