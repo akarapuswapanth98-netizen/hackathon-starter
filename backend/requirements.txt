@@ -12,7 +12,7 @@ python-jose[cryptography]==3.5.0  # JWT auth (optional, only used when AUTH_ENAB
 
 # Database - SQLAlchemy for persistent storage (SQLite default, PostgreSQL-ready)
 sqlalchemy==2.0.32
-alembic==1.13.1
+alembic==1.20.0
 # asyncpg==0.29.0  # uncomment for PostgreSQL async support
 # psycopg2-binary==2.9.9  # uncomment for PostgreSQL sync support
 
